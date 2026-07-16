@@ -47,7 +47,7 @@ class HotkeyListener:
         self._on_cancel = on_cancel
         self._down = False
         # Backends can deliver a trailing event after stop() (X11 does), so
-        # gate callbacks on our own flag to make hotkey swaps airtight.
+        # gate callbacks on our own flag to make shutdown airtight.
         self._active = True
         self._listener = keyboard.Listener(
             on_press=self._handle_press, on_release=self._handle_release
@@ -64,6 +64,19 @@ class HotkeyListener:
     def stop(self) -> None:
         self._active = False
         self._listener.stop()
+
+    def retarget(self, hotkey: str) -> None:
+        """Watch a different key on the live listener.
+
+        The pynput listener must never be stopped and recreated for a hotkey
+        change: a new listener builds its keyboard-layout context through
+        TIS/HIToolbox on the fresh listener thread, and once the AppKit tray
+        loop owns the process macOS kills it with SIGTRAP for calling those
+        APIs off the main thread. Swapping the target key is pure Python and
+        safe from any thread.
+        """
+        self._target = parse_hotkey(hotkey)  # raises before mutating state
+        self._down = False
 
     def _matches(self, key) -> bool:
         if key == self._target:
