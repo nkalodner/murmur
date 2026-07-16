@@ -202,6 +202,7 @@ class App:
                     replacements=cfg.replacements,
                     vocabulary=cfg.vocabulary,
                     vocab_threshold=cfg.vocab_threshold,
+                    formatting=cfg.formatting,
                     trailing_space=cfg.trailing_space,
                 )
                 if text:

@@ -170,9 +170,14 @@ def process(
     replacements: list[dict] | None = None,
     vocabulary: list[str] | None = None,
     vocab_threshold: float = DEFAULT_VOCAB_THRESHOLD,
+    formatting: bool = True,
     trailing_space: bool = True,
 ) -> str:
-    """Full post-processing pipeline: replacements, then vocabulary, then cleanup."""
+    """Full pipeline: replacements, vocabulary, spoken-form formatting, cleanup."""
     text = apply_replacements(text, replacements or [])
     text = apply_vocabulary(text, vocabulary or [], vocab_threshold)
+    if formatting:
+        from murmur.formatting import format_speech
+
+        text = format_speech(text)
     return clean(text, trailing_space)

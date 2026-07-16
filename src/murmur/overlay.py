@@ -22,7 +22,7 @@ from typing import Callable
 
 log = logging.getLogger("murmur")
 
-WIDTH, HEIGHT = 208, 52
+WIDTH, HEIGHT = 132, 52
 BARS = 9
 KEY = "#08090b"  # transparency key color (Windows) / plain background elsewhere
 CAPSULE = "#17191d"
@@ -30,7 +30,6 @@ BORDER = "#2b2f36"
 REC = "#e5484d"
 ACCENT = "#38bdf8"
 DIM = "#5b6470"
-TEXT = "#e7ecf2"
 
 
 def supported() -> bool:
@@ -192,10 +191,12 @@ class Pill:
         self._phase += 0.35
         level = max(0.05, min(1.0, self._level())) if recording else 0.0
 
+        # No text: the red dot means recording, the blue dot means transcribing,
+        # and the bars carry the motion.
         dot = REC if recording else ACCENT
-        c.create_oval(20, HEIGHT / 2 - 4, 28, HEIGHT / 2 + 4, fill=dot, outline="")
+        c.create_oval(18, HEIGHT / 2 - 4, 26, HEIGHT / 2 + 4, fill=dot, outline="")
 
-        bx0, mid, bw, gap = 44, HEIGHT / 2, 5, 4
+        bx0, mid, bw, gap = 38, HEIGHT / 2, 5, 4
         for i in range(BARS):
             if recording:
                 wobble = 0.55 + 0.45 * math.sin(self._phase + i * 0.9)
@@ -208,6 +209,3 @@ class Pill:
             color = ACCENT if recording else DIM
             c.create_rectangle(x, mid - h / 2, x + bw, mid + h / 2, fill=color, outline="")
 
-        label = "Listening" if recording else "Transcribing"
-        font = ("Segoe UI", 10, "bold") if sys.platform == "win32" else ("Helvetica", 10, "bold")
-        c.create_text(WIDTH - 16, HEIGHT / 2, text=label, fill=TEXT, anchor="e", font=font)
