@@ -1,8 +1,8 @@
 # Murmur
 
-Local push-to-talk dictation for macOS and Windows. Hold a key, talk, release, and the words land wherever your cursor is. It replaces a Wispr Flow subscription with NVIDIA's Parakeet speech model running entirely on your machine: free, offline, and nothing you say leaves your computer.
+Local push-to-talk dictation for macOS and Windows. Hold a key, talk, release, and the words land wherever your cursor is. It replaces a Wispr Flow subscription with NVIDIA's Parakeet speech model running entirely on your machine: free, offline, and nothing you say leaves your computer. MIT licensed.
 
-This folder is a standalone Python app. It shares a repo with noahkalodner.com but has no connection to the site build.
+I develop Murmur inside my personal site's monorepo, and every change is auto-published to [github.com/nkalodner/murmur](https://github.com/nkalodner/murmur), so the public code always matches what I run.
 
 ## How it works
 
@@ -14,31 +14,39 @@ This folder is a standalone Python app. It shares a repo with noahkalodner.com b
 
 ## Install
 
-Both platforms use [uv](https://docs.astral.sh/uv/), which installs and manages Python for you.
+Both platforms use [uv](https://docs.astral.sh/uv/), which installs and manages Python for you. No git, no other setup: install uv, then install Murmur from the hosted wheel.
 
 ### macOS
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-git clone https://github.com/nkalodner/noahkalodner-personal-site.git
-uv tool install ./noahkalodner-personal-site/murmur
+uv tool install https://noahkalodner.com/downloads/murmur_dictation-0.5.0-py3-none-any.whl
 murmur
 ```
+
+(Run the uv line first, then open a fresh terminal so `uv` is on your PATH.)
 
 ### Windows (PowerShell)
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-git clone https://github.com/nkalodner/noahkalodner-personal-site.git
-uv tool install .\noahkalodner-personal-site\murmur
+uv tool install https://noahkalodner.com/downloads/murmur_dictation-0.5.0-py3-none-any.whl
 murmur
+```
+
+### From source
+
+Clone this repo and install the folder that holds `pyproject.toml`:
+
+```bash
+git clone https://github.com/nkalodner/murmur.git
+uv tool install ./murmur
 ```
 
 Notes:
 
-- No git? Download the repo as a zip from GitHub and point `uv tool install` at the unzipped `murmur` folder.
 - If `murmur` is not found after install, run `uv tool update-shell` and open a fresh terminal.
-- To update later: pull the repo, then `uv tool install --reinstall ./noahkalodner-personal-site/murmur`.
+- To update later: rerun the `uv tool install` line above with `--reinstall` (the wheel URL always points at the current version).
 - To remove: `uv tool uninstall murmur-dictation`, then delete `~/.murmur` and the model in `~/.cache/huggingface`.
 
 ### First run
@@ -72,7 +80,8 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 - **Microphone**: pick a specific input, or leave it on the system default. Test mic records about a second and shows the level, so you can confirm it hears you before saving.
 - **Dictionary**: see below.
 - **Behavior**: chimes, paste versus type, trailing space, history, the recording pill, max recording length, tap-lock window, clipboard restore delay. The start-recording cue is a soft low tone; the Play button next to it previews it.
-- **Recording pill**: a small always-on-top overlay near the bottom of the screen while you talk, with bars that move to your voice (Windows and Linux; macOS shows the tray dot instead, since Tk can't share the menu-bar thread). Toggle it under Behavior.
+- **Recording pill**: a small always-on-top overlay near the bottom of the screen while you talk, just a status dot and bars that move to your voice, no text (Windows and Linux; macOS shows the tray dot instead, since Tk can't share the menu-bar thread). Toggle it under Behavior.
+- **Auto-format speech**: spoken times, dates, and numbers come out written. "one pm" types as `1:00 PM`, "three oh five p.m." as `3:05 PM`, "july third" as `July 3rd`, "fifty percent" as `50%`, "twenty dollars" as `$20`, "twenty five" as `25`. Deliberately conservative: anything ambiguous ("five thirty" with no am/pm) stays as spoken, and "which one am I" is never mangled. Toggle under Behavior.
 - **Model**: switch models or precision. A new model downloads on first use and loads on the next dictation.
 - **Startup**: Open Murmur at login (Windows and macOS). See [below](#do-i-need-to-keep-the-terminal-open-start-at-login).
 - **Recent transcripts**: the last few dictations, newest first, for testing dictionary entries.
@@ -103,6 +112,7 @@ Two mechanisms, both applied to every transcript before it is pasted:
 | `trailing_space` | `true` | Append a space so back-to-back dictations flow |
 | `history` | `true` | Log transcripts to `~/.murmur/history.jsonl` |
 | `pill` | `true` | Floating recording overlay (Windows/Linux) |
+| `formatting` | `true` | Spoken times/dates/numbers become written forms (1:00 PM, July 3rd, 50%) |
 | `vocabulary` | `[]` | Dictionary words/phrases, spelled how they should be typed |
 | `replacements` | `[]` | Exact fixes: `{"from": "heard", "to": "typed"}` |
 | `vocab_threshold` | `0.82` | How close a word must sound to snap to vocabulary (lower catches more) |

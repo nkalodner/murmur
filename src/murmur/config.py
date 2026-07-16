@@ -29,6 +29,7 @@ class Config:
     trailing_space: bool = True  # append a space so the next dictation flows on
     history: bool = True  # append transcripts to ~/.murmur/history.jsonl
     pill: bool = True  # show the floating recording pill (Windows/Linux)
+    formatting: bool = True  # spoken times/dates/numbers -> written forms (1:00 PM)
     # Personal dictionary: words/phrases spelled the way you want them typed
     # (fuzzy-matched against each transcript), plus exact heard->typed pairs.
     vocabulary: list[str] = field(default_factory=list)
@@ -78,7 +79,7 @@ def validate(cfg: Config) -> None:
         value = getattr(cfg, name)
         if value is not None and not isinstance(value, str):
             raise ValueError(f"{name} must be a string or null")
-    for name in ("sounds", "paste", "trailing_space", "history", "pill"):
+    for name in ("sounds", "paste", "trailing_space", "history", "pill", "formatting"):
         if not isinstance(getattr(cfg, name), bool):
             raise ValueError(f"{name} must be true or false")
     _int_in("tap_lock_ms", cfg.tap_lock_ms, 50, 2000)
