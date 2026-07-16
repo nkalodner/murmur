@@ -270,7 +270,7 @@ class App:
 
         from murmur.audio import find_input_device
         from murmur.config import Config, save, validate
-        from murmur.hotkey import HotkeyListener, parse_hotkey
+        from murmur.hotkey import parse_hotkey
 
         known = {f.name for f in dc_fields(Config)}
         unknown = set(data) - known
@@ -310,11 +310,9 @@ class App:
             if new.hotkey != old.hotkey and self.listener is not None:
                 if self._state in (State.RECORDING, State.LOCKED):
                     self._finish_recording()
-                self.listener.stop()
-                self.listener = HotkeyListener(
-                    new.hotkey, self.on_press, self.on_release, self.on_cancel
-                )
-                self.listener.start()
+                # In place; recreating the listener here crashes on macOS
+                # (see HotkeyListener.retarget).
+                self.listener.retarget(new.hotkey)
             self._set_state(self._state)  # refresh the tray title + menu hint
         save(self.cfg)
         self._reconcile_pill()  # start/stop the overlay if cfg.pill changed
