@@ -156,6 +156,7 @@
         <label class="check"><input type="checkbox" id="paste"><span>Paste into apps<span class="sub">Off types character by character instead</span></span></label>
         <label class="check"><input type="checkbox" id="trailing_space"><span>Trailing space<span class="sub">So back-to-back dictations flow</span></span></label>
         <label class="check"><input type="checkbox" id="history"><span>Keep history<span class="sub">Transcripts saved to ~/.murmur/history.jsonl</span></span></label>
+        <label class="check"><input type="checkbox" id="pill"><span>Recording pill<span class="sub">Floating overlay while recording (Windows, Linux)</span></span></label>
       </div>
       <div class="grid2" style="margin-top:6px">
         <div class="num"><span>Max recording<span class="sub">Seconds before a take auto-stops</span></span><input type="number" id="max_seconds" min="5" max="1800"></div>
@@ -331,7 +332,7 @@ function renderAll(state) {
   devices = state.devices || [];
   $("keycap").textContent = cfg.hotkey;
   renderDevices(); renderVocab(); renderPairs();
-  for (const id of ["sounds", "paste", "trailing_space", "history"]) $(id).checked = !!cfg[id];
+  for (const id of ["sounds", "paste", "trailing_space", "history", "pill"]) $(id).checked = !!cfg[id];
   for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"]) $(id).value = cfg[id];
   $("threshold").value = cfg.vocab_threshold;
   $("thresholdVal").textContent = Number(cfg.vocab_threshold).toFixed(2);
@@ -414,7 +415,7 @@ $("pairAdd").addEventListener("click", () => {
   if (rows.length) rows[rows.length - 2].focus();
 });
 
-for (const id of ["sounds", "paste", "trailing_space", "history"])
+for (const id of ["sounds", "paste", "trailing_space", "history", "pill"])
   $(id).addEventListener("change", () => { cfg[id] = $(id).checked; setDirty(true); });
 for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"])
   $(id).addEventListener("input", () => { cfg[id] = parseInt($(id).value, 10); setDirty(true); });
