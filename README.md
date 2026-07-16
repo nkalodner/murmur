@@ -10,6 +10,7 @@ This folder is a standalone Python app. It shares a repo with noahkalodner.com b
 - Hold the key and speak. Release, and Murmur transcribes with Parakeet and pastes the text into whatever app has focus.
 - Quick-tap the key instead to record hands-free, then tap again to finish. Esc cancels a recording.
 - Transcription runs on your CPU with the int8 ONNX build of `parakeet-tdt-0.6b-v2`. A ten second sentence takes about a second on a modern laptop, with punctuation and capitalization included.
+- A local settings page (tray menu, or `murmur --settings`) handles the hotkey, the mic, a personal dictionary, and everything else. See [Settings](#settings).
 
 ## Install
 
@@ -63,9 +64,27 @@ The tray icon shows state: gray is idle, red is recording, amber is transcribing
 
 Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches of audio are split at pauses and transcribed piece by piece. Every transcript is also appended to `~/.murmur/history.jsonl`, so pasting into the wrong window never loses your words.
 
+## Settings
+
+`murmur --settings` opens the settings page, starting Murmur first if it needs to. It is also in the tray menu, and double-clicking the tray icon opens it on Windows. The page is served by Murmur itself on `127.0.0.1` only; nothing leaves your machine. Changes apply immediately, including the hotkey, and persist to `~/.murmur/config.json`.
+
+- **Hotkey**: click Change key and press the one you want. Esc stays reserved for canceling a recording.
+- **Microphone**: pick a specific input, or leave it on the system default.
+- **Dictionary**: see below.
+- **Behavior**: chimes, paste versus type, trailing space, history, max recording length, tap-lock window, clipboard restore delay.
+- **Model**: switch models or precision. A new model downloads on first use and loads on the next dictation.
+- **Recent transcripts**: the last few dictations, newest first, for testing dictionary entries.
+
+### The dictionary
+
+Two mechanisms, both applied to every transcript before it is pasted:
+
+- **Vocabulary**: words and phrases spelled and cased exactly how you want them typed. Transcripts that come out close snap to your spelling, so "wisper" becomes "Wispr" and "photo globe" becomes "Photoglobe". Match sensitivity (`vocab_threshold`) sets how close a word must sound before it snaps; add proper nouns and jargon, and skip everyday words since exact matches adopt your casing.
+- **Replacements**: exact heard-to-typed pairs for things the model reliably mishears the same way, like "cloud code" becoming "Claude Code". Matched case-insensitively on word boundaries.
+
 ## Configuration
 
-`~/.murmur/config.json` is created on first run:
+`~/.murmur/config.json` is created on first run. The settings page edits all of it; the file is there for hand edits and backups:
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -81,6 +100,9 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 | `max_seconds` | `120` | Auto-stop for a single recording |
 | `trailing_space` | `true` | Append a space so back-to-back dictations flow |
 | `history` | `true` | Log transcripts to `~/.murmur/history.jsonl` |
+| `vocabulary` | `[]` | Dictionary words/phrases, spelled how they should be typed |
+| `replacements` | `[]` | Exact fixes: `{"from": "heard", "to": "typed"}` |
+| `vocab_threshold` | `0.82` | How close a word must sound to snap to vocabulary (lower catches more) |
 
 Hotkey names come from pynput: `ctrl_r`, `alt_r`, `cmd_r`, `f8`, `pause`, and friends. Pick a key that types nothing on its own; bare modifiers work best. On international Windows layouts `alt_r` is AltGr, so prefer `ctrl_r` there.
 
@@ -121,7 +143,8 @@ Heads up: launched this way, macOS attributes the permission prompts to `python`
 - **An app rejects the paste** (some terminals, password fields): set `"paste": false` to type the text instead.
 - **Clipboard contents vanished**: Murmur restores text clipboards after pasting, but images and files are lost. Set `restore_clipboard_ms` to `-1` if you would rather keep the transcript on the clipboard.
 - **Model download failed midway**: rerun `murmur --download`; it resumes.
-- **Wrong mic**: `murmur --list-devices`, then set `device` to a name substring.
+- **Wrong mic**: pick it in the settings page, or `murmur --list-devices` and set `device` to a name substring.
+- **A word keeps coming out wrong**: add it to the vocabulary (settings page), or add an exact replacement if the model mishears it the same way every time.
 
 ## Development
 

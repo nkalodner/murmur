@@ -46,6 +46,9 @@ class HotkeyListener:
         self._on_release = on_release
         self._on_cancel = on_cancel
         self._down = False
+        # Backends can deliver a trailing event after stop() (X11 does), so
+        # gate callbacks on our own flag to make hotkey swaps airtight.
+        self._active = True
         self._listener = keyboard.Listener(
             on_press=self._handle_press, on_release=self._handle_release
         )
@@ -59,6 +62,7 @@ class HotkeyListener:
         self._listener.wait()
 
     def stop(self) -> None:
+        self._active = False
         self._listener.stop()
 
     def _matches(self, key) -> bool:
@@ -81,6 +85,8 @@ class HotkeyListener:
         return False
 
     def _handle_press(self, key) -> None:
+        if not self._active:
+            return
         try:
             if self._matches(key):
                 if not self._down:  # ignore OS key repeat while held
@@ -92,6 +98,8 @@ class HotkeyListener:
             log.exception("hotkey press handler failed")
 
     def _handle_release(self, key) -> None:
+        if not self._active:
+            return
         try:
             if self._matches(key):
                 if self._down:

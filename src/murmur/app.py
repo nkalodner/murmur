@@ -14,7 +14,7 @@ from queue import SimpleQueue
 
 from murmur import __version__
 from murmur.config import HISTORY_PATH, Config, load
-from murmur.textproc import clean
+from murmur.textproc import process
 
 log = logging.getLogger("murmur")
 
@@ -49,6 +49,8 @@ class App:
         self.injector = Injector(cfg.paste, cfg.restore_clipboard_ms, self._hotkey_down)
         self.listener = None  # created in run()
         self.tray = None
+        self.settings = None  # SettingsServer, created in run()
+        self.settings_url: str | None = None
 
         self._lock = threading.RLock()
         self._state = State.IDLE
@@ -164,7 +166,14 @@ class App:
                 break
             wav, seconds = job
             try:
-                text = clean(self.transcriber.transcribe(wav), self.cfg.trailing_space)
+                cfg = self.cfg
+                text = process(
+                    self.transcriber.transcribe(wav),
+                    replacements=cfg.replacements,
+                    vocabulary=cfg.vocabulary,
+                    vocab_threshold=cfg.vocab_threshold,
+                    trailing_space=cfg.trailing_space,
+                )
                 if text:
                     self.injector.inject(text)
                     self._append_history(seconds, text)
@@ -194,9 +203,98 @@ class App:
         except OSError as e:
             log.debug("history write failed: %s", e)
 
+    # -- settings (called from the local settings server) ---------------------
+
+    def snapshot(self) -> dict:
+        from dataclasses import asdict
+
+        with self._lock:
+            state = self._state.value
+            model_ready = self.transcriber.ready
+            cfg = asdict(self.cfg)
+        devices = []
+        try:
+            from murmur.audio import input_devices
+
+            devices = input_devices()
+        except Exception as e:
+            log.debug("device listing failed: %s", e)
+        return {
+            "state": state,
+            "model_ready": model_ready,
+            "platform": sys.platform,
+            "config": cfg,
+            "devices": devices,
+        }
+
+    def apply_config(self, data: dict) -> list[str]:
+        """Merge, validate, and hot-apply a settings change; persists on success.
+
+        Raises ValueError/LookupError with a readable message for bad input.
+        """
+        from dataclasses import asdict, fields as dc_fields
+
+        from murmur.audio import find_input_device
+        from murmur.config import Config, save, validate
+        from murmur.hotkey import HotkeyListener, parse_hotkey
+
+        known = {f.name for f in dc_fields(Config)}
+        unknown = set(data) - known
+        if unknown:
+            raise ValueError(f"unknown config keys: {', '.join(sorted(unknown))}")
+        warnings: list[str] = []
+        with self._lock:
+            old = self.cfg
+            new = Config(**{**asdict(old), **data})
+            validate(new)
+            if new.hotkey != old.hotkey:
+                parse_hotkey(new.hotkey)
+            device_index = self._device
+            if new.device != old.device:
+                device_index = find_input_device(new.device)
+
+            self.cfg = new
+            self.sounds.enabled = new.sounds
+            self.injector.paste = new.paste
+            self.injector.restore_clipboard_ms = new.restore_clipboard_ms
+            if new.device != old.device:
+                self._device = device_index
+                self.recorder.set_device(device_index)
+                if self._state in (State.RECORDING, State.LOCKED):
+                    warnings.append("the microphone change applies to the next recording")
+            if (new.model, new.quantization, new.language) != (
+                old.model,
+                old.quantization,
+                old.language,
+            ):
+                from murmur.transcribe import Transcriber
+
+                self.transcriber = Transcriber(new.model, new.quantization, new.language)
+                warnings.append(
+                    "the model loads on the next dictation, so that one will be slow"
+                )
+            if new.hotkey != old.hotkey and self.listener is not None:
+                if self._state in (State.RECORDING, State.LOCKED):
+                    self._finish_recording()
+                self.listener.stop()
+                self.listener = HotkeyListener(
+                    new.hotkey, self.on_press, self.on_release, self.on_cancel
+                )
+                self.listener.start()
+            self._set_state(self._state)  # refresh the tray title + menu hint
+        save(self.cfg)
+        log.info("Settings updated%s", f" ({'; '.join(warnings)})" if warnings else "")
+        return warnings
+
+    def open_settings(self) -> None:
+        if self.settings_url:
+            import webbrowser
+
+            webbrowser.open(self.settings_url)
+
     # -- lifecycle -----------------------------------------------------------
 
-    def run(self, use_tray: bool = True) -> None:
+    def run(self, use_tray: bool = True, open_settings: bool = False) -> None:
         from murmur.hotkey import HotkeyListener
 
         if sys.platform == "darwin":
@@ -223,11 +321,27 @@ class App:
             self.cfg.hotkey,
         )
 
+        try:
+            from murmur.server import SettingsServer
+
+            self.settings = SettingsServer(self)
+            self.settings_url = self.settings.start()
+        except Exception as e:
+            log.warning("Settings page unavailable: %s", e)
+        if self.settings_url:
+            log.info("Settings page: %s (also in the tray menu)", self.settings_url)
+            if open_settings:
+                self.open_settings()
+
         if use_tray:
             try:
                 from murmur.tray import Tray
 
-                self.tray = Tray(self.cfg.hotkey, self.shutdown)
+                self.tray = Tray(
+                    lambda: f"Hold {self.cfg.hotkey} to dictate. Tap locks, Esc cancels.",
+                    self.shutdown,
+                    on_settings=self.open_settings if self.settings_url else None,
+                )
             except Exception as e:
                 log.warning("Tray unavailable (%s); running without it. Ctrl+C quits.", e)
                 self.tray = None
@@ -261,6 +375,8 @@ class App:
             pass
         self.recorder.abort()
         self._jobs.put(None)
+        if self.settings:
+            self.settings.stop()
         if self.tray:
             self.tray.stop()
 
@@ -284,6 +400,11 @@ def main(argv: list[str] | None = None) -> int:
         "--no-tray", action="store_true", help="run without a tray icon (terminal only)"
     )
     parser.add_argument("--list-devices", action="store_true", help="list input devices and exit")
+    parser.add_argument(
+        "--settings",
+        action="store_true",
+        help="open the settings page (starts Murmur first if it isn't running)",
+    )
     parser.add_argument("--download", action="store_true", help="download the model and exit")
     parser.add_argument(
         "--doctor", action="store_true", help="check mic, model, permissions, clipboard and exit"
@@ -337,6 +458,17 @@ def main(argv: list[str] | None = None) -> int:
         from murmur.doctor import run as doctor_run
 
         return doctor_run(cfg)
+    if args.settings:
+        from murmur.server import find_running_instance
+
+        url = find_running_instance()
+        if url:
+            import webbrowser
+
+            webbrowser.open(url)
+            print(f"Settings: {url}")
+            return 0
+        log.info("Murmur is not running yet; starting it now.")
 
     try:
         app = App(cfg)
@@ -344,7 +476,7 @@ def main(argv: list[str] | None = None) -> int:
         log.error("%s", e)
         return 2
     try:
-        app.run(use_tray=not args.no_tray)
+        app.run(use_tray=not args.no_tray, open_settings=args.settings)
     except ValueError as e:  # bad hotkey name
         log.error("%s", e)
         return 2

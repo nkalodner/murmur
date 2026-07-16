@@ -35,24 +35,42 @@ def _image(state: str):
 
 
 class Tray:
-    def __init__(self, hotkey: str, on_quit: Callable[[], None]):
+    def __init__(
+        self,
+        hint: Callable[[], str] | str,
+        on_quit: Callable[[], None],
+        on_settings: Callable[[], None] | None = None,
+    ):
         import pystray
 
         self._state = "loading"
         self._on_quit = on_quit
-        menu = pystray.Menu(
+        self._on_settings = on_settings
+        hint_text = hint if callable(hint) else (lambda: str(hint))
+        items = [
             pystray.MenuItem(
                 lambda item: f"Murmur: {LABELS.get(self._state, self._state)}",
                 None,
                 enabled=False,
             ),
-            pystray.MenuItem(
-                f"Hold {hotkey} to dictate. Tap locks, Esc cancels.", None, enabled=False
-            ),
-            pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit Murmur", self._quit),
-        )
+            pystray.MenuItem(lambda item: hint_text(), None, enabled=False),
+        ]
+        if on_settings is not None:
+            items += [
+                pystray.Menu.SEPARATOR,
+                # default=True makes double-clicking the tray icon open it.
+                pystray.MenuItem("Settings...", self._settings, default=True),
+            ]
+        items += [pystray.Menu.SEPARATOR, pystray.MenuItem("Quit Murmur", self._quit)]
+        menu = pystray.Menu(*items)
         self._icon = pystray.Icon("murmur", _image("loading"), "Murmur", menu)
+
+    def _settings(self, icon, item) -> None:
+        try:
+            if self._on_settings:
+                self._on_settings()
+        except Exception as e:
+            log.debug("open settings failed: %s", e)
 
     def _quit(self, icon, item) -> None:
         try:

@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Murmur settings</title>
+<style>
+  :root{
+    --bg:hsl(40 11% 10%); --card:hsl(37 12% 13%); --field:hsl(36 12% 16%);
+    --border:hsl(40 9% 24%); --border-strong:hsl(40 9% 32%);
+    --fg:hsl(40 33% 91%); --body:hsl(39 24% 81%); --muted:hsl(38 12% 59%); --faint:hsl(37 10% 42%);
+    --accent:hsl(197 72% 56%); --accent-deep:hsl(197 66% 68%); --accent-soft:hsl(197 40% 20%);
+    --danger:hsl(9 56% 56%); --rec:hsl(357 76% 60%); --busy:hsl(38 90% 55%);
+    --mono:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--body);font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:720px;margin:0 auto;padding:36px 20px 110px}
+  a{color:var(--accent-deep)}
+  h1{font-family:Georgia,"Times New Roman",serif;font-weight:500;font-size:30px;letter-spacing:-.01em;color:var(--fg)}
+  .kicker{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+  .kicker .dash{display:inline-block;width:6px;height:6px;background:var(--accent);margin-right:8px;transform:translateY(-1px)}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .status{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--faint)}
+  .dot.idle{background:hsl(38 12% 59%)} .dot.recording{background:var(--rec)}
+  .dot.busy{background:var(--busy)} .dot.loading{background:transparent;border:2px solid var(--faint);width:7px;height:7px}
+  .dot.off{background:transparent;border:2px solid var(--danger);width:7px;height:7px}
+  section{margin-top:26px}
+  section>.kicker{display:block;margin-bottom:8px}
+  .panel{background:var(--card);border:1px solid var(--border);padding:16px}
+  .hint{font-size:13px;color:var(--muted);margin-top:8px}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  label.check{display:flex;align-items:center;gap:9px;padding:7px 0;cursor:pointer;color:var(--body)}
+  label.check .sub{display:block;font-size:12.5px;color:var(--muted)}
+  input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent)}
+  input[type=text],input[type=number],select{
+    background:var(--field);border:1px solid var(--border);color:var(--fg);
+    border-radius:2px;padding:7px 10px;font:inherit;font-size:14px;min-width:0}
+  input[type=text]:focus,input[type=number]:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  input[type=range]{accent-color:var(--accent);width:180px}
+  button{background:var(--field);border:1px solid var(--border);color:var(--body);border-radius:2px;
+    padding:7px 12px;font:inherit;font-size:13.5px;cursor:pointer}
+  button:hover{border-color:var(--border-strong);color:var(--fg)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.primary:hover{filter:brightness(1.07);color:#fff}
+  button.ghost{background:transparent}
+  button.icon{padding:4px 8px;font-size:14px;line-height:1;color:var(--faint)}
+  button.icon:hover{color:var(--danger);border-color:var(--border-strong)}
+  .keycap{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:15px;font-weight:700;
+    color:var(--fg);background:var(--field);border:1px solid var(--border-strong);border-bottom-width:3px;
+    border-radius:3px;padding:8px 14px;min-width:96px;justify-content:center}
+  .keycap.listening{border-color:var(--accent);color:var(--accent-deep);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.55}}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .chip{display:inline-flex;align-items:center;gap:7px;background:var(--field);border:1px solid var(--border);
+    border-radius:2px;padding:4px 6px 4px 10px;font-family:var(--mono);font-size:13px;color:var(--fg)}
+  .chip button{border:none;background:none;color:var(--faint);padding:0 3px;font-size:14px;cursor:pointer}
+  .chip button:hover{color:var(--danger)}
+  .pairs{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  .pair{display:grid;grid-template-columns:1fr auto 1fr auto;align-items:center;gap:8px}
+  .pair .arrow{color:var(--faint);font-family:var(--mono)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px}
+  @media (max-width:560px){.grid2{grid-template-columns:1fr}.pair{grid-template-columns:1fr auto 1fr auto}}
+  .num{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0}
+  .num span .sub{display:block;font-size:12.5px;color:var(--muted)}
+  .num input{width:96px;text-align:right}
+  .history{list-style:none;display:flex;flex-direction:column;gap:0;margin-top:2px}
+  .history li{border-bottom:1px solid var(--border);padding:8px 2px;display:flex;gap:12px;align-items:baseline}
+  .history li:last-child{border-bottom:none}
+  .history .ts{font-family:var(--mono);font-size:11px;color:var(--faint);white-space:nowrap}
+  .history .tx{font-size:14px;color:var(--body);overflow-wrap:anywhere}
+  .savebar{position:fixed;left:0;right:0;bottom:0;background:color-mix(in srgb,var(--bg) 88%,transparent);
+    backdrop-filter:blur(8px);border-top:1px solid var(--border)}
+  .savebar .inner{max-width:720px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px;justify-content:flex-end}
+  .savemsg{font-size:13px;color:var(--muted);margin-right:auto}
+  .savemsg.err{color:var(--danger)} .savemsg.ok{color:var(--accent-deep)}
+  .offline{display:none;margin-top:14px;border:1px solid var(--danger);background:color-mix(in srgb,var(--danger) 12%,var(--card));padding:12px 14px;font-size:14px;color:var(--fg)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <span class="kicker"><span class="dash"></span>Murmur</span>
+      <h1>Settings</h1>
+    </div>
+    <span class="status"><span id="dot" class="dot loading"></span><span id="statusText">connecting</span></span>
+  </header>
+  <div id="offline" class="offline">Murmur is not running (or was quit). Start it in a terminal with <b>murmur</b>, then reload this page.</div>
+
+  <section>
+    <span class="kicker">Hotkey</span>
+    <div class="panel">
+      <div class="row">
+        <span id="keycap" class="keycap">ctrl_r</span>
+        <button id="captureBtn" type="button">Change key</button>
+      </div>
+      <p class="hint">Hold it to dictate; a quick tap locks hands-free. While changing, press the key you want.
+      Esc stays reserved for canceling a recording. Bare keys like right Ctrl, right Alt, or F8 work best;
+      a letter key would still type that letter everywhere.</p>
+    </div>
+  </section>
+
+  <section>
+    <span class="kicker">Microphone</span>
+    <div class="panel">
+      <div class="row">
+        <select id="device" style="flex:1"></select>
+        <button id="reloadDevices" type="button" title="Rescan input devices">Rescan</button>
+      </div>
+      <p class="hint">Applies to the next recording. The system default follows whatever the OS considers the default mic.</p>
+    </div>
+  </section>
+
+  <section>
+    <span class="kicker">Dictionary</span>
+    <div class="panel">
+      <div class="kicker" style="letter-spacing:.12em">Vocabulary</div>
+      <p class="hint" style="margin-top:4px">Names and jargon, spelled and cased exactly how they should be typed.
+      Transcripts that come out close snap to your spelling ("wisper" becomes "Wispr"). Stick to proper nouns;
+      everyday words would get rewritten too.</p>
+      <div class="row" style="margin-top:10px">
+        <input type="text" id="vocabInput" placeholder="Add a word or phrase" style="flex:1">
+        <button id="vocabAdd" type="button">Add</button>
+      </div>
+      <div id="vocabChips" class="chips"></div>
+
+      <div class="kicker" style="letter-spacing:.12em;margin-top:20px">Replacements</div>
+      <p class="hint" style="margin-top:4px">Exact fixes for things the model reliably mishears: whenever the left side
+      shows up in a transcript, the right side is typed instead.</p>
+      <div id="pairs" class="pairs"></div>
+      <div class="row" style="margin-top:10px"><button id="pairAdd" type="button">Add replacement</button></div>
+
+      <div class="num" style="margin-top:14px">
+        <span>Match sensitivity<span class="sub">How close a word must sound before it snaps to your vocabulary. Left catches more, right is stricter.</span></span>
+        <span class="row" style="gap:8px"><input type="range" id="threshold" min="0.70" max="0.95" step="0.01"><span id="thresholdVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">0.82</span></span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <span class="kicker">Behavior</span>
+    <div class="panel">
+      <div class="grid2">
+        <label class="check"><input type="checkbox" id="sounds"><span>Chimes<span class="sub">Short cues on start, stop, cancel, ready</span></span></label>
+        <label class="check"><input type="checkbox" id="paste"><span>Paste into apps<span class="sub">Off types character by character instead</span></span></label>
+        <label class="check"><input type="checkbox" id="trailing_space"><span>Trailing space<span class="sub">So back-to-back dictations flow</span></span></label>
+        <label class="check"><input type="checkbox" id="history"><span>Keep history<span class="sub">Transcripts saved to ~/.murmur/history.jsonl</span></span></label>
+      </div>
+      <div class="grid2" style="margin-top:6px">
+        <div class="num"><span>Max recording<span class="sub">Seconds before a take auto-stops</span></span><input type="number" id="max_seconds" min="5" max="1800"></div>
+        <div class="num"><span>Tap lock<span class="sub">Presses shorter than this (ms) go hands-free</span></span><input type="number" id="tap_lock_ms" min="50" max="2000"></div>
+        <div class="num"><span>Clipboard restore<span class="sub">Delay in ms; -1 keeps the transcript on the clipboard</span></span><input type="number" id="restore_clipboard_ms" min="-1" max="60000"></div>
+        <div class="num"><span>Test the chime</span><button id="testSound" type="button">Play</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <span class="kicker">Model</span>
+    <div class="panel">
+      <div class="row">
+        <input type="text" id="model" list="modelList" style="flex:1">
+        <datalist id="modelList">
+          <option value="nemo-parakeet-tdt-0.6b-v2">English, the default</option>
+          <option value="nemo-parakeet-tdt-0.6b-v3">Multilingual, 25 European languages</option>
+          <option value="whisper-base">Whisper base, small and quick</option>
+        </datalist>
+        <select id="quantization">
+          <option value="int8">int8 (fast, default)</option>
+          <option value="">full precision</option>
+        </select>
+      </div>
+      <p class="hint">Changing the model downloads it on first use (roughly 700 MB for Parakeet) and loads it on your next
+      dictation, so that one will be slow.</p>
+    </div>
+  </section>
+
+  <section>
+    <span class="kicker">Recent transcripts</span>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between">
+        <span class="hint" style="margin:0">The last few dictations, newest first. Handy for testing dictionary entries.</span>
+        <button id="historyReload" type="button">Refresh</button>
+      </div>
+      <ul id="historyList" class="history"></ul>
+    </div>
+  </section>
+</div>
+
+<div class="savebar"><div class="inner">
+  <span id="saveMsg" class="savemsg"></span>
+  <button id="revert" type="button" class="ghost">Revert</button>
+  <button id="save" type="button" class="primary">Save changes</button>
+</div></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const HEADERS = { "Content-Type": "application/json", "X-Murmur": "1" };
+
+let cfg = null;        // editable copy
+let devices = [];
+let dirty = false;
+let capturing = false;
+
+const CODE_MAP = {
+  ControlLeft: "ctrl_l", ControlRight: "ctrl_r", AltLeft: "alt_l", AltRight: "alt_r",
+  ShiftLeft: "shift_l", ShiftRight: "shift_r", MetaLeft: "cmd", MetaRight: "cmd_r",
+  Pause: "pause", ScrollLock: "scroll_lock", Insert: "insert", Home: "home", End: "end",
+  PageUp: "page_up", PageDown: "page_down", ContextMenu: "menu", Space: "space",
+  Tab: "tab", CapsLock: "caps_lock", NumLock: "num_lock",
+};
+
+function setDirty(on) {
+  dirty = on;
+  $("save").disabled = !on;
+  $("revert").disabled = !on;
+  if (on) msg("Unsaved changes", "");
+}
+function msg(text, kind) {
+  const el = $("saveMsg");
+  el.textContent = text;
+  el.className = "savemsg" + (kind ? " " + kind : "");
+}
+
+function esc(s) { return String(s); } // values only ever land in textContent/value
+
+// ---- render -------------------------------------------------------------
+function renderStatus(s) {
+  const dot = $("dot");
+  let cls = s.state, label = s.state;
+  if (s.state === "idle" && !s.model_ready) { cls = "loading"; label = "loading model"; }
+  if (s.state === "locked") { cls = "recording"; label = "recording"; }
+  dot.className = "dot " + cls;
+  $("statusText").textContent = label + " · v" + s.version;
+  $("offline").style.display = "none";
+}
+function renderOffline() {
+  $("dot").className = "dot off";
+  $("statusText").textContent = "not running";
+  $("offline").style.display = "block";
+}
+
+function renderDevices() {
+  const sel = $("device");
+  sel.replaceChildren();
+  const def = document.createElement("option");
+  def.value = "";
+  const d = devices.find((x) => x.default);
+  def.textContent = "System default" + (d ? " (" + d.name + ")" : "");
+  sel.appendChild(def);
+  for (const dev of devices) {
+    const o = document.createElement("option");
+    o.value = dev.name;
+    o.textContent = dev.name + (dev.default ? " *" : "");
+    sel.appendChild(o);
+  }
+  sel.value = cfg.device || "";
+  if (sel.value !== (cfg.device || "")) {
+    // configured device not present right now; show it anyway
+    const o = document.createElement("option");
+    o.value = cfg.device;
+    o.textContent = cfg.device + " (not found)";
+    sel.appendChild(o);
+    sel.value = cfg.device;
+  }
+}
+
+function renderVocab() {
+  const box = $("vocabChips");
+  box.replaceChildren();
+  cfg.vocabulary.forEach((word, i) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    const t = document.createElement("span");
+    t.textContent = word;
+    const x = document.createElement("button");
+    x.type = "button"; x.textContent = "×"; x.title = "Remove";
+    x.addEventListener("click", () => { cfg.vocabulary.splice(i, 1); renderVocab(); setDirty(true); });
+    chip.append(t, x);
+    box.appendChild(chip);
+  });
+}
+
+function renderPairs() {
+  const box = $("pairs");
+  box.replaceChildren();
+  cfg.replacements.forEach((pair, i) => {
+    const row = document.createElement("div");
+    row.className = "pair";
+    const from = document.createElement("input");
+    from.type = "text"; from.placeholder = "heard"; from.value = pair.from || "";
+    from.addEventListener("input", () => { pair.from = from.value; setDirty(true); });
+    const arrow = document.createElement("span");
+    arrow.className = "arrow"; arrow.textContent = "→";
+    const to = document.createElement("input");
+    to.type = "text"; to.placeholder = "typed instead"; to.value = pair.to || "";
+    to.addEventListener("input", () => { pair.to = to.value; setDirty(true); });
+    const x = document.createElement("button");
+    x.type = "button"; x.className = "icon"; x.textContent = "×"; x.title = "Remove";
+    x.addEventListener("click", () => { cfg.replacements.splice(i, 1); renderPairs(); setDirty(true); });
+    row.append(from, arrow, to, x);
+    box.appendChild(row);
+  });
+}
+
+function renderAll(state) {
+  renderStatus(state);
+  cfg = JSON.parse(JSON.stringify(state.config));
+  cfg.vocabulary = cfg.vocabulary || [];
+  cfg.replacements = (cfg.replacements || []).map((p) => ({ from: p.from || "", to: p.to || "" }));
+  devices = state.devices || [];
+  $("keycap").textContent = cfg.hotkey;
+  renderDevices(); renderVocab(); renderPairs();
+  for (const id of ["sounds", "paste", "trailing_space", "history"]) $(id).checked = !!cfg[id];
+  for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"]) $(id).value = cfg[id];
+  $("threshold").value = cfg.vocab_threshold;
+  $("thresholdVal").textContent = Number(cfg.vocab_threshold).toFixed(2);
+  $("model").value = cfg.model;
+  $("quantization").value = cfg.quantization || "";
+  setDirty(false);
+  msg("", "");
+}
+
+// ---- wiring ---------------------------------------------------------------
+async function loadState() {
+  try {
+    const res = await fetch("/api/state");
+    renderAll(await res.json());
+  } catch { renderOffline(); }
+}
+async function pollStatus() {
+  try {
+    const res = await fetch("/api/state");
+    renderStatus(await res.json());
+  } catch { renderOffline(); }
+}
+
+$("captureBtn").addEventListener("click", () => {
+  capturing = !capturing;
+  $("keycap").classList.toggle("listening", capturing);
+  $("keycap").textContent = capturing ? "press a key" : cfg.hotkey;
+  $("captureBtn").textContent = capturing ? "Cancel" : "Change key";
+});
+document.addEventListener("keydown", (e) => {
+  if (!capturing) return;
+  e.preventDefault();
+  if (e.code === "Escape") {
+    capturing = false;
+  } else {
+    let name = null;
+    if (CODE_MAP[e.code]) name = CODE_MAP[e.code];
+    else if (/^F\d{1,2}$/.test(e.code)) name = e.code.toLowerCase();
+    else if (/^Key([A-Z])$/.test(e.code)) name = e.code.slice(3).toLowerCase();
+    else if (/^Digit(\d)$/.test(e.code)) name = e.code.slice(5);
+    if (!name) { msg("That key can't be captured; try another.", "err"); return; }
+    cfg.hotkey = name;
+    capturing = false;
+    setDirty(true);
+  }
+  $("keycap").classList.remove("listening");
+  $("keycap").textContent = cfg.hotkey;
+  $("captureBtn").textContent = "Change key";
+});
+
+$("device").addEventListener("change", () => { cfg.device = $("device").value || null; setDirty(true); });
+$("reloadDevices").addEventListener("click", async () => {
+  try { const res = await fetch("/api/state"); const s = await res.json(); devices = s.devices || []; renderDevices(); }
+  catch { renderOffline(); }
+});
+
+function addVocab() {
+  const v = $("vocabInput").value.trim();
+  if (!v) return;
+  if (!cfg.vocabulary.some((x) => x.toLowerCase() === v.toLowerCase())) {
+    cfg.vocabulary.push(v);
+    renderVocab(); setDirty(true);
+  }
+  $("vocabInput").value = "";
+  $("vocabInput").focus();
+}
+$("vocabAdd").addEventListener("click", addVocab);
+$("vocabInput").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addVocab(); } });
+
+$("pairAdd").addEventListener("click", () => {
+  cfg.replacements.push({ from: "", to: "" });
+  renderPairs(); setDirty(true);
+  const rows = $("pairs").querySelectorAll("input");
+  if (rows.length) rows[rows.length - 2].focus();
+});
+
+for (const id of ["sounds", "paste", "trailing_space", "history"])
+  $(id).addEventListener("change", () => { cfg[id] = $(id).checked; setDirty(true); });
+for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"])
+  $(id).addEventListener("input", () => { cfg[id] = parseInt($(id).value, 10); setDirty(true); });
+$("threshold").addEventListener("input", () => {
+  cfg.vocab_threshold = parseFloat($("threshold").value);
+  $("thresholdVal").textContent = cfg.vocab_threshold.toFixed(2);
+  setDirty(true);
+});
+$("model").addEventListener("input", () => { cfg.model = $("model").value.trim(); setDirty(true); });
+$("quantization").addEventListener("change", () => { cfg.quantization = $("quantization").value || null; setDirty(true); });
+
+$("testSound").addEventListener("click", () => {
+  fetch("/api/test-sound", { method: "POST", headers: HEADERS, body: "{}" }).catch(() => renderOffline());
+});
+
+$("save").addEventListener("click", async () => {
+  const payload = { ...cfg };
+  payload.vocabulary = payload.vocabulary.map((v) => v.trim()).filter(Boolean);
+  payload.replacements = payload.replacements
+    .map((p) => ({ from: (p.from || "").trim(), to: (p.to || "").trim() }))
+    .filter((p) => p.from && p.to);
+  msg("Saving…", "");
+  try {
+    const res = await fetch("/api/config", { method: "POST", headers: HEADERS, body: JSON.stringify(payload) });
+    const out = await res.json();
+    if (!res.ok) { msg(out.error || "Save failed", "err"); return; }
+    renderAll(out);
+    msg(out.warnings && out.warnings.length ? "Saved. " + out.warnings.join("; ") + "." : "Saved.", "ok");
+  } catch { renderOffline(); msg("Murmur is not reachable.", "err"); }
+});
+$("revert").addEventListener("click", loadState);
+
+async function loadHistory() {
+  try {
+    const res = await fetch("/api/history");
+    const out = await res.json();
+    const ul = $("historyList");
+    ul.replaceChildren();
+    if (!out.entries || !out.entries.length) {
+      const li = document.createElement("li");
+      li.textContent = "Nothing yet. Dictate something and hit Refresh.";
+      li.style.color = "var(--faint)";
+      ul.appendChild(li);
+      return;
+    }
+    for (const e of out.entries) {
+      const li = document.createElement("li");
+      const ts = document.createElement("span");
+      ts.className = "ts";
+      ts.textContent = (e.ts || "").replace("T", " ").replace("+00:00", "").slice(5, 16);
+      const tx = document.createElement("span");
+      tx.className = "tx";
+      tx.textContent = e.text || "";
+      li.append(ts, tx);
+      ul.appendChild(li);
+    }
+  } catch { renderOffline(); }
+}
+$("historyReload").addEventListener("click", loadHistory);
+
+window.addEventListener("beforeunload", (e) => { if (dirty) e.preventDefault(); });
+
+loadState();
+loadHistory();
+setInterval(pollStatus, 5000);
+</script>
+</body>
+</html>
