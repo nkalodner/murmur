@@ -56,6 +56,32 @@ def _norm(token: str) -> str:
     return re.sub(r"[^\w']+", "", token.lower())
 
 
+# Ordinary spoken words the vocabulary must never rewrite. Without this, a
+# short entry like a name "Andi" would fuzzy-match "and" (and "and I") and
+# rewrite them everywhere. Vocabulary is for names and jargon, so common
+# function/filler words are off limits unless the user literally said the entry.
+COMMON_WORDS = frozenset(
+    """
+    a an and the this that these those i me my mine myself you your yours we us our
+    ours he him his she her hers it its they them their theirs who whom whose which
+    what to of in on at by for with from as into onto up down out off over under
+    again is am are was were be been being do does did doing have has had having will
+    would shall should can could may might must not no nor so than too very just only
+    also then there here where when why how all any both each few more most other some
+    such own same about above after before between through during without within if
+    because while until unless though although and/or or but yet and i'm i'll i've
+    i'd you're we're they're he's she's it's that's don't didn't doesn't isn't aren't
+    wasn't weren't won't wouldn't can't couldn't should've would've one two three
+    yeah yes ok okay um uh like well now got get go went going gonna wanna kind sort
+    """.split()
+)
+
+
+def _is_ordinary(window: list[str]) -> bool:
+    """True when every word in the window is a plain, common spoken word."""
+    return all(_norm(t) in COMMON_WORDS for t in window)
+
+
 def apply_vocabulary(
     text: str, vocabulary: list[str], threshold: float = DEFAULT_VOCAB_THRESHOLD
 ) -> str:
@@ -91,16 +117,20 @@ def apply_vocabulary(
                 win_joined = "".join(win_parts)
                 if not win_joined:
                     continue
+                exact = win_joined == norm_joined
+                # Short entries need a near-exact match, so a name like "Andi"
+                # doesn't swallow "and" (ratio 0.86). Longer entries use the
+                # user's threshold.
+                floor = 0.95 if len(norm_joined) <= 4 else threshold
                 if len(norm_joined) < 3:
-                    # Too short for fuzzy matching; exact only.
-                    matched = win_joined == norm_joined
+                    matched = exact
                 elif w == k:
                     matched = (
                         max(
                             SequenceMatcher(None, win_space, norm_space).ratio(),
                             SequenceMatcher(None, win_joined, norm_joined).ratio(),
                         )
-                        >= threshold
+                        >= floor
                     )
                 else:
                     # An off-size window absorbs or drops a whole word, so it
@@ -108,8 +138,13 @@ def apply_vocabulary(
                     # or short neighbors get eaten ("to kalodner" -> "Kalodner").
                     matched = (
                         SequenceMatcher(None, win_joined, norm_joined).ratio()
-                        >= max(threshold, 0.95)
+                        >= max(floor, 0.95)
                     )
+                # Never rewrite a run of ordinary spoken words, even when they
+                # happen to concatenate to an entry ("and" + "I" -> "andi").
+                # Vocabulary is for names and jargon, not everyday speech.
+                if matched and _is_ordinary(window):
+                    matched = False
                 if matched:
                     lead = re.match(r"^[^\w']*", window[0]).group(0)
                     trail = re.search(r"[^\w']*$", window[-1]).group(0)

@@ -69,10 +69,15 @@ class Recorder:
         self._stream = None
         self._chunks: list[np.ndarray] = []
         self._sr = TARGET_SR
+        self._level = 0.0  # smoothed input level, 0..1, for the recording pill
 
     @property
     def active(self) -> bool:
         return self._stream is not None
+
+    def current_level(self) -> float:
+        """Latest smoothed mic level (0..1). A plain float read, GIL-safe."""
+        return self._level
 
     def set_device(self, device: int | None) -> None:
         """Point future recordings at a different input device."""
@@ -116,12 +121,18 @@ class Recorder:
         if status:
             log.debug("audio status: %s", status)
         self._chunks.append(indata.copy())
+        # Track a smoothed level for the overlay meter. sqrt spreads quiet
+        # speech across the meter; the blend keeps the bars from flickering.
+        rms = float(np.sqrt(np.mean(np.square(indata, dtype=np.float64)))) if indata.size else 0.0
+        target = min(1.0, rms**0.5 * 3.2)
+        self._level = self._level * 0.5 + target * 0.5
 
     def stop(self) -> tuple[np.ndarray, float]:
         """Close the stream and return (mono float32 at 16 kHz, seconds recorded)."""
         with self._lock:
             stream, self._stream = self._stream, None
             chunks, self._chunks = self._chunks, []
+        self._level = 0.0
         if stream is not None:
             try:
                 stream.stop()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import threading
 import time
@@ -51,6 +52,8 @@ class App:
         self.tray = None
         self.settings = None  # SettingsServer, created in run()
         self.settings_url: str | None = None
+        self.pill = None  # recording overlay, created in run()
+        self._used_pill = False  # a Tk overlay ran in a thread this session
 
         self._lock = threading.RLock()
         self._state = State.IDLE
@@ -74,6 +77,33 @@ class App:
             if state == State.IDLE and not self.transcriber.ready:
                 name = "loading"
             self.tray.set_state(name)
+        if self.pill:
+            if state in (State.RECORDING, State.LOCKED):
+                self.pill.show("recording")
+            elif state == State.BUSY:
+                self.pill.show("transcribing")
+            else:
+                self.pill.hide()
+
+    def _reconcile_pill(self) -> None:
+        """Start or stop the overlay to match cfg.pill. Called outside the
+        lock, since Pill.start() waits for its Tk thread to come up."""
+        from murmur import overlay
+
+        if self.cfg.pill and overlay.supported() and self.pill is None:
+            try:
+                pill = overlay.Pill(self.recorder.current_level)
+                self.pill = pill if pill.start() else None
+            except Exception as e:
+                log.debug("recording pill unavailable: %s", e)
+                self.pill = None
+            if self.pill:
+                self._used_pill = True
+                with self._lock:
+                    self._set_state(self._state)
+        elif not self.cfg.pill and self.pill is not None:
+            self.pill.stop()
+            self.pill = None
 
     # -- hotkey callbacks (run on the listener thread) --------------------
 
@@ -286,6 +316,7 @@ class App:
                 self.listener.start()
             self._set_state(self._state)  # refresh the tray title + menu hint
         save(self.cfg)
+        self._reconcile_pill()  # start/stop the overlay if cfg.pill changed
         log.info("Settings updated%s", f" ({'; '.join(warnings)})" if warnings else "")
         return warnings
 
@@ -368,6 +399,8 @@ class App:
             if open_settings:
                 self.open_settings()
 
+        self._reconcile_pill()
+
         if use_tray:
             try:
                 from murmur.tray import Tray
@@ -410,6 +443,8 @@ class App:
             pass
         self.recorder.abort()
         self._jobs.put(None)
+        if self.pill:
+            self.pill.stop()
         if self.settings:
             self.settings.stop()
         if self.tray:
@@ -551,4 +586,12 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as e:  # bad hotkey name
         log.error("%s", e)
         return 2
+    if app._used_pill:
+        # tkinter ran the pill in a background thread; a normal interpreter
+        # exit would then finalize Tcl from the main thread and abort with
+        # "async handler deleted by the wrong thread". Our own shutdown is
+        # already done, so exit hard and skip that finalization.
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0)
     return 0

@@ -71,7 +71,8 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 - **Hotkey**: click Change key and press the one you want. Esc stays reserved for canceling a recording.
 - **Microphone**: pick a specific input, or leave it on the system default. Test mic records about a second and shows the level, so you can confirm it hears you before saving.
 - **Dictionary**: see below.
-- **Behavior**: chimes, paste versus type, trailing space, history, max recording length, tap-lock window, clipboard restore delay. The start-recording cue is a soft low tone; the Play button next to it previews it.
+- **Behavior**: chimes, paste versus type, trailing space, history, the recording pill, max recording length, tap-lock window, clipboard restore delay. The start-recording cue is a soft low tone; the Play button next to it previews it.
+- **Recording pill**: a small always-on-top overlay near the bottom of the screen while you talk, with bars that move to your voice (Windows and Linux; macOS shows the tray dot instead, since Tk can't share the menu-bar thread). Toggle it under Behavior.
 - **Model**: switch models or precision. A new model downloads on first use and loads on the next dictation.
 - **Startup**: Open Murmur at login (Windows and macOS). See [below](#do-i-need-to-keep-the-terminal-open-start-at-login).
 - **Recent transcripts**: the last few dictations, newest first, for testing dictionary entries.
@@ -80,7 +81,7 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 
 Two mechanisms, both applied to every transcript before it is pasted:
 
-- **Vocabulary**: words and phrases spelled and cased exactly how you want them typed. Transcripts that come out close snap to your spelling, so "wisper" becomes "Wispr" and "photo globe" becomes "Photoglobe". Match sensitivity (`vocab_threshold`) sets how close a word must sound before it snaps; add proper nouns and jargon, and skip everyday words since exact matches adopt your casing.
+- **Vocabulary**: words and phrases spelled and cased exactly how you want them typed. Transcripts that come out close snap to your spelling, so "wisper" becomes "Wispr" and "photo globe" becomes "Photoglobe". Ordinary spoken words are left alone, so a short name like "Andi" never rewrites "and" or "and I", and very short entries only snap on a near-exact match. Match sensitivity (`vocab_threshold`) sets how close a word must sound before it snaps; add proper nouns and jargon.
 - **Replacements**: exact heard-to-typed pairs for things the model reliably mishears the same way, like "cloud code" becoming "Claude Code". Matched case-insensitively on word boundaries.
 
 ## Configuration
@@ -101,6 +102,7 @@ Two mechanisms, both applied to every transcript before it is pasted:
 | `max_seconds` | `120` | Auto-stop for a single recording |
 | `trailing_space` | `true` | Append a space so back-to-back dictations flow |
 | `history` | `true` | Log transcripts to `~/.murmur/history.jsonl` |
+| `pill` | `true` | Floating recording overlay (Windows/Linux) |
 | `vocabulary` | `[]` | Dictionary words/phrases, spelled how they should be typed |
 | `replacements` | `[]` | Exact fixes: `{"from": "heard", "to": "typed"}` |
 | `vocab_threshold` | `0.82` | How close a word must sound to snap to vocabulary (lower catches more) |
