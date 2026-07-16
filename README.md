@@ -69,10 +69,11 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 `murmur --settings` opens the settings page, starting Murmur first if it needs to. It is also in the tray menu, and double-clicking the tray icon opens it on Windows. The page is served by Murmur itself on `127.0.0.1` only; nothing leaves your machine. Changes apply immediately, including the hotkey, and persist to `~/.murmur/config.json`.
 
 - **Hotkey**: click Change key and press the one you want. Esc stays reserved for canceling a recording.
-- **Microphone**: pick a specific input, or leave it on the system default.
+- **Microphone**: pick a specific input, or leave it on the system default. Test mic records about a second and shows the level, so you can confirm it hears you before saving.
 - **Dictionary**: see below.
-- **Behavior**: chimes, paste versus type, trailing space, history, max recording length, tap-lock window, clipboard restore delay.
+- **Behavior**: chimes, paste versus type, trailing space, history, max recording length, tap-lock window, clipboard restore delay. The start-recording cue is a soft low tone; the Play button next to it previews it.
 - **Model**: switch models or precision. A new model downloads on first use and loads on the next dictation.
+- **Startup**: Open Murmur at login (Windows and macOS). See [below](#do-i-need-to-keep-the-terminal-open-start-at-login).
 - **Recent transcripts**: the last few dictations, newest first, for testing dictionary entries.
 
 ### The dictionary
@@ -106,35 +107,33 @@ Two mechanisms, both applied to every transcript before it is pasted:
 
 Hotkey names come from pynput: `ctrl_r`, `alt_r`, `cmd_r`, `f8`, `pause`, and friends. Pick a key that types nothing on its own; bare modifiers work best. On international Windows layouts `alt_r` is AltGr, so prefer `ctrl_r` there.
 
-CLI flags override the config for one run:
+CLI flags override the config for one run, and a few act and exit:
 
 ```
 murmur --hotkey f8 --model nemo-parakeet-tdt-0.6b-v3 --type --no-sounds --no-tray -v
+murmur --settings            # open the settings page
+murmur --enable-autostart    # start at login (also --disable-autostart)
+murmur --list-devices        # list input devices
+murmur --doctor              # check mic, model, permissions, clipboard
 ```
 
 ### Other models
 
 `nemo-parakeet-tdt-0.6b-v2` is English only and currently the best quality per CPU cycle. `nemo-parakeet-tdt-0.6b-v3` is the multilingual version (25 European languages). Any model [onnx-asr](https://github.com/istupakov/onnx-asr) supports will work, including `whisper-base`.
 
-## Start at login
+## Do I need to keep the terminal open? Start at login
 
-**macOS**: save this as `~/Library/LaunchAgents/com.noah.murmur.plist` (fix the username in the path), then run `launchctl load ~/Library/LaunchAgents/com.noah.murmur.plist`:
+No. Turn on **Open Murmur at login** in the settings page (Startup section) and Murmur starts by itself, in the tray, with no terminal window. The same switch is available from the command line:
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Label</key><string>com.noah.murmur</string>
-  <key>ProgramArguments</key><array><string>/Users/YOU/.local/bin/murmur</string></array>
-  <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>/tmp/murmur.log</string>
-  <key>StandardErrorPath</key><string>/tmp/murmur.log</string>
-</dict></plist>
+```
+murmur --enable-autostart     # start at login from now on
+murmur --disable-autostart    # stop
 ```
 
-Heads up: launched this way, macOS attributes the permission prompts to `python` instead of your terminal, so expect to grant Microphone, Input Monitoring, and Accessibility once more. Keeping Murmur in a terminal tab is the simpler routine.
+Behind the scenes this uses a windowless launcher, `murmurw`, that the install created alongside `murmur`. You can also run `murmurw` yourself any time to launch Murmur without a console window, then close the terminal; it keeps running in the tray. (Plain `murmur` from a terminal ties the app to that window, so closing it quits Murmur.)
 
-**Windows**: press Win+R, run `shell:startup`, and drop in a shortcut to `%USERPROFILE%\.local\bin\murmur.exe`. Set the shortcut to run minimized if the console window bothers you.
+- **Windows**: the toggle writes a per-user startup entry pointing at `murmurw.exe`. Nothing shows on screen but the tray icon.
+- **macOS**: the toggle installs a LaunchAgent and loads it. One caveat: launched this way, macOS sees a new launcher, so it asks once more for Microphone, Input Monitoring, and Accessibility. Grant them and you are set.
 
 ## Troubleshooting
 

@@ -123,8 +123,42 @@ class SettingsServer:
                         },
                     )
                 elif path == "/api/test-sound":
-                    app.sounds.play("ready")
+                    from murmur.sounds import CUES
+
+                    cue = data.get("cue", "start")
+                    if cue not in CUES:
+                        cue = "start"
+                    # Honor the test even if cues are turned off, without
+                    # changing the persisted setting.
+                    was = app.sounds.enabled
+                    app.sounds.enabled = True
+                    try:
+                        app.sounds.play(cue)
+                    finally:
+                        app.sounds.enabled = was
                     self._json(200, {"ok": True})
+                elif path == "/api/test-mic":
+                    try:
+                        result = app.test_microphone(data.get("device") or None)
+                    except (ValueError, LookupError) as e:
+                        self._json(400, {"error": str(e)})
+                        return
+                    except Exception as e:
+                        log.debug("mic test failed: %s", e)
+                        self._json(400, {"error": f"could not open the microphone: {e}"})
+                        return
+                    self._json(200, result)
+                elif path == "/api/autostart":
+                    if "enabled" not in data or not isinstance(data["enabled"], bool):
+                        self._json(400, {"error": "expected {\"enabled\": true|false}"})
+                        return
+                    try:
+                        status = app.set_autostart(data["enabled"])
+                    except Exception as e:
+                        log.debug("autostart change failed: %s", e)
+                        self._json(400, {"error": str(e)})
+                        return
+                    self._json(200, {"ok": True, "autostart": status})
                 else:
                     self._json(404, {"error": "not found"})
 

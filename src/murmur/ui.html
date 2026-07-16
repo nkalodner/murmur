@@ -77,6 +77,9 @@
   .savemsg{font-size:13px;color:var(--muted);margin-right:auto}
   .savemsg.err{color:var(--danger)} .savemsg.ok{color:var(--accent-deep)}
   .offline{display:none;margin-top:14px;border:1px solid var(--danger);background:color-mix(in srgb,var(--danger) 12%,var(--card));padding:12px 14px;font-size:14px;color:var(--fg)}
+  .meter{height:10px;background:var(--field);border:1px solid var(--border);border-radius:2px;overflow:hidden}
+  .meterfill{height:100%;width:0;background:var(--accent);transition:width .15s ease}
+  .meterfill.loud{background:hsl(108 40% 52%)} .meterfill.faint{background:var(--busy)} .meterfill.silent{background:var(--danger)}
 </style>
 </head>
 <body>
@@ -109,8 +112,13 @@
       <div class="row">
         <select id="device" style="flex:1"></select>
         <button id="reloadDevices" type="button" title="Rescan input devices">Rescan</button>
+        <button id="testMic" type="button">Test mic</button>
       </div>
-      <p class="hint">Applies to the next recording. The system default follows whatever the OS considers the default mic.</p>
+      <div id="micResult" style="display:none;margin-top:12px">
+        <div class="meter"><div id="meterFill" class="meterfill"></div></div>
+        <p id="micMsg" class="hint" style="margin-top:8px"></p>
+      </div>
+      <p class="hint">Applies to the next recording. Test mic records about a second from the selected device and shows the level, so you can confirm it hears you before saving.</p>
     </div>
   </section>
 
@@ -153,8 +161,16 @@
         <div class="num"><span>Max recording<span class="sub">Seconds before a take auto-stops</span></span><input type="number" id="max_seconds" min="5" max="1800"></div>
         <div class="num"><span>Tap lock<span class="sub">Presses shorter than this (ms) go hands-free</span></span><input type="number" id="tap_lock_ms" min="50" max="2000"></div>
         <div class="num"><span>Clipboard restore<span class="sub">Delay in ms; -1 keeps the transcript on the clipboard</span></span><input type="number" id="restore_clipboard_ms" min="-1" max="60000"></div>
-        <div class="num"><span>Test the chime</span><button id="testSound" type="button">Play</button></div>
+        <div class="num"><span>Start sound<span class="sub">The soft cue when a recording begins</span></span><button id="testSound" type="button">Play</button></div>
       </div>
+    </div>
+  </section>
+
+  <section id="startupSection" style="display:none">
+    <span class="kicker">Startup</span>
+    <div class="panel">
+      <label class="check"><input type="checkbox" id="autostart"><span>Open Murmur at login<span class="sub">Starts automatically in the tray, no terminal window. Takes effect right away.</span></span></label>
+      <p id="autostartMac" class="hint" style="display:none">On a Mac, the first launch this way will ask again for Microphone, Input Monitoring, and Accessibility, since the system sees it as a new launcher. Grant them once.</p>
     </div>
   </section>
 
@@ -321,6 +337,12 @@ function renderAll(state) {
   $("thresholdVal").textContent = Number(cfg.vocab_threshold).toFixed(2);
   $("model").value = cfg.model;
   $("quantization").value = cfg.quantization || "";
+  // Startup is applied immediately (an OS-level, per-machine action), so it
+  // lives outside the Save flow and reflects the real system state.
+  const as = state.autostart || { supported: false, enabled: false };
+  $("startupSection").style.display = as.supported ? "block" : "none";
+  $("autostart").checked = !!as.enabled;
+  $("autostartMac").style.display = state.platform === "darwin" ? "block" : "none";
   setDirty(false);
   msg("", "");
 }
@@ -405,7 +427,47 @@ $("model").addEventListener("input", () => { cfg.model = $("model").value.trim()
 $("quantization").addEventListener("change", () => { cfg.quantization = $("quantization").value || null; setDirty(true); });
 
 $("testSound").addEventListener("click", () => {
-  fetch("/api/test-sound", { method: "POST", headers: HEADERS, body: "{}" }).catch(() => renderOffline());
+  fetch("/api/test-sound", { method: "POST", headers: HEADERS, body: JSON.stringify({ cue: "start" }) }).catch(() => renderOffline());
+});
+
+$("testMic").addEventListener("click", async () => {
+  const btn = $("testMic");
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Listening…";
+  $("micResult").style.display = "block";
+  $("micMsg").textContent = "Recording about a second. Say a few words.";
+  $("meterFill").style.width = "0%";
+  $("meterFill").className = "meterfill";
+  try {
+    const res = await fetch("/api/test-mic", {
+      method: "POST", headers: HEADERS,
+      body: JSON.stringify({ device: $("device").value || null }),
+    });
+    const out = await res.json();
+    if (!res.ok) {
+      $("meterFill").className = "meterfill silent";
+      $("meterFill").style.width = "3%";
+      $("micMsg").textContent = out.error || "Mic test failed.";
+    } else {
+      const cls = out.peak >= 0.06 ? "loud" : out.peak >= 0.012 ? "faint" : "silent";
+      $("meterFill").className = "meterfill " + cls;
+      $("meterFill").style.width = Math.max(3, Math.min(100, Math.round(out.peak * 140))) + "%";
+      $("micMsg").textContent = out.message;
+    }
+  } catch { renderOffline(); $("micMsg").textContent = "Murmur is not reachable."; }
+  finally { btn.disabled = false; btn.textContent = label; }
+});
+
+$("autostart").addEventListener("change", async () => {
+  const enabled = $("autostart").checked;
+  try {
+    const res = await fetch("/api/autostart", { method: "POST", headers: HEADERS, body: JSON.stringify({ enabled }) });
+    const out = await res.json();
+    if (!res.ok) { $("autostart").checked = !enabled; msg(out.error || "Could not change the startup setting.", "err"); return; }
+    $("autostart").checked = !!(out.autostart && out.autostart.enabled);
+    msg(enabled ? "Murmur will open at login." : "Murmur will no longer open at login.", "ok");
+  } catch { $("autostart").checked = !enabled; renderOffline(); }
 });
 
 $("save").addEventListener("click", async () => {

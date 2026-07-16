@@ -219,12 +219,15 @@ class App:
             devices = input_devices()
         except Exception as e:
             log.debug("device listing failed: %s", e)
+        from murmur import autostart
+
         return {
             "state": state,
             "model_ready": model_ready,
             "platform": sys.platform,
             "config": cfg,
             "devices": devices,
+            "autostart": autostart.status(),
         }
 
     def apply_config(self, data: dict) -> list[str]:
@@ -285,6 +288,38 @@ class App:
         save(self.cfg)
         log.info("Settings updated%s", f" ({'; '.join(warnings)})" if warnings else "")
         return warnings
+
+    def test_microphone(self, device_name: str | None) -> dict:
+        """Record ~1.4s from a device and report the level, for the settings page."""
+        import numpy as np
+
+        from murmur.audio import find_input_device, record_sample
+
+        with self._lock:
+            if self._state in (State.RECORDING, State.LOCKED):
+                raise ValueError("finish the current recording first, then test the mic")
+        index = find_input_device(device_name)  # raises LookupError if not found
+        wav, seconds = record_sample(index)
+        if seconds <= 0 or not len(wav):
+            raise ValueError("no audio captured; is the microphone connected?")
+        peak = float(np.max(np.abs(wav)))
+        rms = float(np.sqrt(np.mean(wav.astype(np.float64) ** 2)))
+        if peak >= 0.06:
+            message = "Sounds good. The mic is picking you up clearly."
+        elif peak >= 0.012:
+            message = "Faint. It hears something, but try speaking up or moving closer."
+        else:
+            message = "Nearly silent. Check that this is the right mic and it isn't muted."
+        return {"ok": True, "peak": round(peak, 4), "rms": round(rms, 4), "message": message}
+
+    def set_autostart(self, enabled: bool) -> dict:
+        from murmur import autostart
+
+        if enabled:
+            autostart.enable()
+        else:
+            autostart.disable()
+        return autostart.status()
 
     def open_settings(self) -> None:
         if self.settings_url:
@@ -407,16 +442,39 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--download", action="store_true", help="download the model and exit")
     parser.add_argument(
+        "--enable-autostart",
+        action="store_true",
+        help="start Murmur automatically at login, then exit",
+    )
+    parser.add_argument(
+        "--disable-autostart", action="store_true", help="stop starting at login, then exit"
+    )
+    parser.add_argument(
         "--doctor", action="store_true", help="check mic, model, permissions, clipboard and exit"
     )
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--version", action="version", version=f"murmur {__version__}")
     args = parser.parse_args(argv)
 
+    # Under the windowless launcher (murmurw / pythonw) there is no console,
+    # so stderr is None and console logging would crash on the first message.
+    # Fall back to a log file in that case.
+    handlers: list[logging.Handler] = []
+    if sys.stderr is not None:
+        handlers.append(logging.StreamHandler())
+    else:
+        try:
+            from murmur.config import CONFIG_DIR
+
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            handlers.append(logging.FileHandler(CONFIG_DIR / "murmur.log", encoding="utf-8"))
+        except OSError:
+            handlers.append(logging.NullHandler())
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(message)s",
         datefmt="%H:%M:%S",
+        handlers=handlers,
     )
     # -v turns up murmur's own logs without drowning in library debug noise.
     logging.getLogger("murmur").setLevel(logging.DEBUG if args.verbose else logging.INFO)
@@ -453,6 +511,19 @@ def main(argv: list[str] | None = None) -> int:
             log.error("Download failed: %s", e)
             log.error("Check your connection and rerun murmur --download; it resumes.")
             return 1
+        return 0
+    if args.enable_autostart or args.disable_autostart:
+        from murmur import autostart
+
+        if not autostart.supported():
+            log.error("Start at login is only available on Windows and macOS.")
+            return 2
+        try:
+            autostart.enable() if args.enable_autostart else autostart.disable()
+        except Exception as e:
+            log.error("%s", e)
+            return 1
+        print("Murmur will start at login." if args.enable_autostart else "Murmur will no longer start at login.")
         return 0
     if args.doctor:
         from murmur.doctor import run as doctor_run
