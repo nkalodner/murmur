@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "murmur-dictation"
+version = "0.1.0"
+description = "Local push-to-talk dictation for Windows and macOS. Hold a key, talk, release; the words land at your cursor. Runs NVIDIA Parakeet on your machine."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "onnx-asr[cpu,hub]>=0.10,<1",
+    "sounddevice>=0.5",
+    "soxr>=0.5",
+    "pynput>=1.8",
+    "pystray>=0.19",
+    "pillow>=10",
+    "pyperclip>=1.9",
+]
+
+[project.scripts]
+murmur = "murmur.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/murmur"]
