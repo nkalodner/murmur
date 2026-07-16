@@ -14,39 +14,32 @@ I develop Murmur inside my personal site's monorepo, and every change is auto-pu
 
 ## Install
 
-Both platforms use [uv](https://docs.astral.sh/uv/), which installs and manages Python for you. No git, no other setup: install uv, then install Murmur from the hosted wheel.
+You need [uv](https://docs.astral.sh/uv/), which installs and manages Python for you, and git.
 
-### macOS
+Install uv on macOS:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-uv tool install https://noahkalodner.com/downloads/murmur_dictation-0.5.0-py3-none-any.whl
-murmur
 ```
 
-(Run the uv line first, then open a fresh terminal so `uv` is on your PATH.)
-
-### Windows (PowerShell)
+Or on Windows (PowerShell):
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-uv tool install https://noahkalodner.com/downloads/murmur_dictation-0.5.0-py3-none-any.whl
-murmur
 ```
 
-### From source
-
-Clone this repo and install the folder that holds `pyproject.toml`:
+Then, in a fresh terminal on either platform, clone this repo and install it:
 
 ```bash
 git clone https://github.com/nkalodner/murmur.git
 uv tool install ./murmur
+murmur
 ```
 
 Notes:
 
 - If `murmur` is not found after install, run `uv tool update-shell` and open a fresh terminal.
-- To update later: rerun the `uv tool install` line above with `--reinstall` (the wheel URL always points at the current version).
+- To update later: `git -C murmur pull`, then `uv tool install --reinstall ./murmur`.
 - To remove: `uv tool uninstall murmur-dictation`, then delete `~/.murmur` and the model in `~/.cache/huggingface`.
 
 ### First run
