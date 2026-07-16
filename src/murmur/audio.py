@@ -150,3 +150,11 @@ def preflight(device: int | None) -> None:
     rec.start()
     time.sleep(0.15)
     rec.abort()
+
+
+def record_sample(device: int | None, seconds: float = 1.4) -> tuple[np.ndarray, float]:
+    """Capture a short clip from a device for the settings-page mic test."""
+    rec = Recorder(device)
+    rec.start()
+    time.sleep(seconds)
+    return rec.stop()

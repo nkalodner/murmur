@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "murmur-dictation"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local push-to-talk dictation for Windows and macOS. Hold a key, talk, release; the words land at your cursor. Runs NVIDIA Parakeet on your machine."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -20,6 +20,12 @@ dependencies = [
 
 [project.scripts]
 murmur = "murmur.app:main"
+
+# Windows-only windowless launcher (no console window), so Murmur can run from
+# the tray with the terminal closed and start silently at login. Identical to
+# `murmur` everywhere else.
+[project.gui-scripts]
+murmurw = "murmur.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/murmur"]
