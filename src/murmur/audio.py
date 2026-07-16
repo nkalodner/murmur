@@ -19,21 +19,34 @@ def _sd():
     return sd
 
 
-def list_input_devices() -> list[str]:
+def input_devices() -> list[dict]:
+    """Structured input-device list (used by the settings page)."""
     sd = _sd()
     try:
         default_in = sd.default.device[0]
     except Exception:
         default_in = -1
-    lines = []
+    out = []
     for i, dev in enumerate(sd.query_devices()):
         if dev.get("max_input_channels", 0) > 0:
-            marker = "*" if i == default_in else " "
-            lines.append(
-                f"{marker} [{i}] {dev['name']}  "
-                f"({dev['max_input_channels']} ch, {int(dev['default_samplerate'])} Hz)"
+            out.append(
+                {
+                    "index": i,
+                    "name": dev["name"],
+                    "channels": int(dev["max_input_channels"]),
+                    "samplerate": int(dev["default_samplerate"]),
+                    "default": i == default_in,
+                }
             )
-    return lines
+    return out
+
+
+def list_input_devices() -> list[str]:
+    return [
+        f"{'*' if d['default'] else ' '} [{d['index']}] {d['name']}  "
+        f"({d['channels']} ch, {d['samplerate']} Hz)"
+        for d in input_devices()
+    ]
 
 
 def find_input_device(name: str | None) -> int | None:
@@ -60,6 +73,11 @@ class Recorder:
     @property
     def active(self) -> bool:
         return self._stream is not None
+
+    def set_device(self, device: int | None) -> None:
+        """Point future recordings at a different input device."""
+        with self._lock:
+            self._device = device
 
     def start(self) -> None:
         sd = _sd()
