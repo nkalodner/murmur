@@ -85,5 +85,21 @@ def run(cfg: Config) -> int:
     except Exception as e:
         _line(False, f"hotkey {cfg.hotkey!r}", str(e))
 
+    from murmur import autostart
+
+    status = autostart.status()
+    if status["supported"]:
+        _line(status["enabled"] or None, "start at login", "on" if status["enabled"] else "off")
+    else:
+        _line(None, "start at login", "not available on this OS")
+
+    from murmur.server import find_running_instance
+
+    running = find_running_instance()
+    if running:
+        _line(True, "already running", f"settings at {running}")
+    else:
+        _line(None, "not running", "start it with: murmur")
+
     print("Doctor checks the environment only. For a live test, run murmur and dictate into a text box.")
     return 0
