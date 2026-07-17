@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "murmur-dictation"
-version = "0.5.6"
+version = "0.5.7"
 description = "Local push-to-talk dictation for Windows and macOS. Hold a key, talk, release; the words land at your cursor. Runs NVIDIA Parakeet on your machine."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -29,3 +29,13 @@ murmurw = "murmur.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/murmur"]
+
+[dependency-groups]
+# Test-only. The suite covers the pure logic (formatting, dictionary, chunking,
+# config, sounds) and the recording pill without pulling the heavy audio/ML
+# stack, so `numpy` + `pillow` + `pynput` + `pytest` is enough to run it.
+dev = ["pytest>=8", "numpy", "pillow>=10", "pynput>=1.8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
