@@ -140,7 +140,7 @@ A `murmur` you start in a terminal is tied to that window, so closing it quits. 
 - **Windows**: the install also created `murmurw`, a windowless launcher. Run `murmurw` yourself any time to start Murmur with no console window, then close the terminal and it stays in the tray.
 - **macOS**: `murmurw` and `murmur` are the same command, so use the login toggle to run without a terminal. To start the background copy right now without logging out, run `launchctl kickstart -k gui/$(id -u)/com.murmur.dictation`. Open the settings from the menu bar or with `murmur --settings` (it attaches to the running copy) rather than launching `murmur` again, which would start a second instance.
 
-- **Windows**: the toggle writes a per-user startup entry pointing at `murmurw.exe`. Nothing shows on screen but the tray icon.
+- **Windows**: the toggle places a shortcut to `murmurw.exe` in your Startup folder (falling back to a registry Run entry if the folder is blocked). Nothing shows on screen but the tray icon.
 - **macOS**: the toggle installs a LaunchAgent and loads it. One caveat: launched this way, macOS sees a new launcher, so it asks once more for Microphone, Input Monitoring, and Accessibility. Grant them and you are set.
 
 Every computer is its own setup. The toggle only touches the machine you run it on, so if you use Murmur on both a Mac and a Windows PC, turn it on once on each. Enabling it on one does nothing for the other.
