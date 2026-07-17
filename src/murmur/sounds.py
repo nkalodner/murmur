@@ -64,6 +64,15 @@ class Sounds:
         try:
             import sounddevice as sd
 
-            sd.play(render(name), SR)
+            # The start cue plays while the mic input stream is open. On macOS an
+            # output stream competing with an active input stream tends to
+            # underrun (crackle) and pop as it tears down, so give the output a
+            # roomier buffer (latency="high") and a tail of silence, so the
+            # stream stops on silence instead of on the tone's release.
+            buf = np.concatenate([render(name), np.zeros(int(SR * 0.06), dtype=np.float32)])
+            try:
+                sd.play(buf, SR, latency="high")
+            except TypeError:  # older sounddevice without the latency kwarg
+                sd.play(buf, SR)
         except Exception as e:
             log.debug("sound %r failed: %s", name, e)
