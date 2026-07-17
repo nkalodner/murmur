@@ -143,6 +143,8 @@ A `murmur` you start in a terminal is tied to that window, so closing it quits. 
 - **Windows**: the toggle writes a per-user startup entry pointing at `murmurw.exe`. Nothing shows on screen but the tray icon.
 - **macOS**: the toggle installs a LaunchAgent and loads it. One caveat: launched this way, macOS sees a new launcher, so it asks once more for Microphone, Input Monitoring, and Accessibility. Grant them and you are set.
 
+Every computer is its own setup. The toggle only touches the machine you run it on, so if you use Murmur on both a Mac and a Windows PC, turn it on once on each. Enabling it on one does nothing for the other.
+
 ## Troubleshooting
 
 - **`uv tool install` fails with "Permission denied" on `~/.cache`** (macOS/Linux): the cache directory is owned by root, usually left behind by an earlier `sudo`. Take it back with `sudo chown -R "$(whoami)" ~/.cache` (and `~/.local` if that one complains too), then reinstall.
@@ -152,6 +154,7 @@ A `murmur` you start in a terminal is tied to that window, so closing it quits. 
 - **A key you rebound to does nothing (macOS)**: some top-row F-keys are media keys (volume, brightness) that Murmur cannot see. Hold Fn while pressing it, enable "Use F1, F2, etc. keys as standard function keys" in System Settings, or pick a bare modifier like `cmd_r`.
 - **An app rejects the paste** (some terminals, password fields): set `"paste": false` to type the text instead.
 - **Clipboard contents vanished**: Murmur restores text clipboards after pasting, but images and files are lost. Set `restore_clipboard_ms` to `-1` if you would rather keep the transcript on the clipboard.
+- **It does not start at login (Windows)**: run `murmur --enable-autostart` and confirm it prints "Murmur will start at login." Startup is per-machine, so enabling it on your Mac never sets up Windows. Murmur should then appear under Task Manager > Startup Apps; if that list shows it as *Disabled*, right-click and choose Enable, since Windows keeps its own on/off flag that can override the entry. If the command reports it cannot find `murmur` on PATH, run `uv tool update-shell`, open a fresh terminal, and try again. After a `uv tool` reinstall or upgrade that moves the command, run the enable line once more to refresh the path it points at.
 - **Model download failed midway**: rerun `murmur --download`; it resumes.
 - **Wrong mic**: pick it in the settings page, or `murmur --list-devices` and set `device` to a name substring.
 - **A word keeps coming out wrong**: add it to the vocabulary (settings page), or add an exact replacement if the model mishears it the same way every time.
