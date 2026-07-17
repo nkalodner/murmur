@@ -1,7 +1,11 @@
 """Start Murmur when you log in. Per-user, no admin, fully reversible.
 
 - Windows: an HKCU ...\\Run registry value pointing at the windowless
-  launcher (murmurw.exe), so nothing appears on screen but the tray icon.
+  launcher (murmurw.exe). Some antivirus / "startup manager" tools silently
+  revert Run-key changes made by apps they do not recognize, so enable() reads
+  the value back and, if it vanished, falls back to a shortcut in the Startup
+  folder before giving up with a clear error. It never reports a success that
+  did not actually happen.
 - macOS: a LaunchAgent plist in ~/Library/LaunchAgents, loaded with launchctl.
 - Linux: unsupported (the app runs there for tests, but has no login story).
 """
@@ -9,6 +13,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -20,6 +25,19 @@ log = logging.getLogger("murmur")
 MAC_LABEL = "com.murmur.dictation"
 WIN_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 WIN_VALUE = "Murmur"
+
+# Shown when both the Run key and the Startup folder shortcut are reverted the
+# instant they are written. That is almost always a security tool, so point the
+# user at the fix instead of leaving them to guess (the exact hole this whole
+# feature fell into once).
+_WIN_BLOCKED_MSG = (
+    "Windows removed Murmur's startup entry right after it was written, and a "
+    "Startup folder shortcut did not stick either. This is almost always "
+    "antivirus or a 'startup manager' blocking startup changes from an app it "
+    "does not recognize. Allow Murmur (murmurw.exe) in that tool, or add the "
+    "shortcut by hand: press Win+R, run 'shell:startup', and drop a shortcut to "
+    "murmurw.exe in the folder that opens."
+)
 
 
 def _executable() -> str | None:
@@ -46,14 +64,8 @@ def status() -> dict:
 
 def is_enabled() -> bool:
     if sys.platform == "win32":
-        import winreg
-
-        try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, WIN_RUN_KEY) as key:
-                winreg.QueryValueEx(key, WIN_VALUE)
-            return True
-        except OSError:
-            return False
+        # Either mechanism counts: the Run key, or the Startup folder fallback.
+        return _win_run_value() is not None or _win_startup_shortcut().exists()
     if sys.platform == "darwin":
         return _mac_plist_path().exists()
     return False
@@ -69,26 +81,16 @@ def enable() -> None:
             "'uv tool install --reinstall ./murmur', then try again."
         )
     if sys.platform == "win32":
-        import winreg
-
-        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, WIN_RUN_KEY) as key:
-            winreg.SetValueEx(key, WIN_VALUE, 0, winreg.REG_SZ, f'"{exe}"')
+        _win_enable(exe)
     elif sys.platform == "darwin":
         _mac_write_plist(exe)
-    log.info("Start at login enabled")
+        log.info("Start at login enabled")
 
 
 def disable() -> None:
     if sys.platform == "win32":
-        import winreg
-
-        try:
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER, WIN_RUN_KEY, 0, winreg.KEY_SET_VALUE
-            ) as key:
-                winreg.DeleteValue(key, WIN_VALUE)
-        except OSError:
-            pass
+        _win_delete_run()
+        _win_startup_shortcut().unlink(missing_ok=True)
     elif sys.platform == "darwin":
         path = _mac_plist_path()
         if path.exists():
@@ -99,6 +101,115 @@ def disable() -> None:
             )
             path.unlink(missing_ok=True)
     log.info("Start at login disabled")
+
+
+# -- Windows ---------------------------------------------------------------
+
+
+def _win_enable(exe: str) -> None:
+    """Write the Run key, verify it survived, and fall back to a Startup-folder
+    shortcut if something reverted it. Raise if neither sticks, so the caller
+    never reports a success that did not happen."""
+    _win_write_run(exe)
+    if _win_run_value() is not None:
+        log.info("Start at login enabled (Run key)")
+        return
+    # The registry write did not survive, so something is reverting it. Try the
+    # Startup folder, which some of those tools leave alone.
+    log.warning("Run-key startup entry was reverted; trying a Startup folder shortcut")
+    try:
+        _win_create_shortcut(exe)
+    except Exception as e:
+        raise RuntimeError(_WIN_BLOCKED_MSG) from e
+    if _win_startup_shortcut().exists():
+        log.info("Start at login enabled (Startup folder)")
+        return
+    raise RuntimeError(_WIN_BLOCKED_MSG)
+
+
+def _win_run_value() -> str | None:
+    import winreg
+
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, WIN_RUN_KEY) as key:
+            value, _ = winreg.QueryValueEx(key, WIN_VALUE)
+            return value
+    except OSError:
+        return None
+
+
+def _win_write_run(exe: str) -> None:
+    import winreg
+
+    with winreg.CreateKey(winreg.HKEY_CURRENT_USER, WIN_RUN_KEY) as key:
+        winreg.SetValueEx(key, WIN_VALUE, 0, winreg.REG_SZ, f'"{exe}"')
+
+
+def _win_delete_run() -> None:
+    import winreg
+
+    try:
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER, WIN_RUN_KEY, 0, winreg.KEY_SET_VALUE
+        ) as key:
+            winreg.DeleteValue(key, WIN_VALUE)
+    except OSError:
+        pass
+
+
+def _win_startup_shortcut() -> Path:
+    appdata = os.environ.get("APPDATA")
+    base = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
+    return (
+        base
+        / "Microsoft"
+        / "Windows"
+        / "Start Menu"
+        / "Programs"
+        / "Startup"
+        / "Murmur.lnk"
+    )
+
+
+def _ps_quote(s: str) -> str:
+    """Wrap a string as a PowerShell single-quoted literal: backslashes stay
+    literal (so Windows paths survive) and embedded single quotes are doubled."""
+    return "'" + s.replace("'", "''") + "'"
+
+
+def _win_create_shortcut(exe: str) -> None:
+    """Create Startup\\Murmur.lnk pointing at murmurw.exe via WScript.Shell.
+    Uses PowerShell so we need no pywin32 dependency."""
+    shortcut = _win_startup_shortcut()
+    shortcut.parent.mkdir(parents=True, exist_ok=True)
+    script = (
+        f"$s = (New-Object -ComObject WScript.Shell).CreateShortcut({_ps_quote(str(shortcut))}); "
+        f"$s.TargetPath = {_ps_quote(exe)}; "
+        "$s.Save()"
+    )
+    result = subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-WindowStyle",
+            "Hidden",
+            "-Command",
+            script,
+        ],
+        capture_output=True,
+        check=False,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if result.returncode != 0:
+        log.debug(
+            "shortcut creation exited %s: %s",
+            result.returncode,
+            result.stderr.decode(errors="replace").strip(),
+        )
+
+
+# -- macOS -----------------------------------------------------------------
 
 
 def _mac_plist_path() -> Path:
