@@ -135,15 +135,21 @@ murmur --enable-autostart     # start at login from now on
 murmur --disable-autostart    # stop
 ```
 
-Behind the scenes this uses a windowless launcher, `murmurw`, that the install created alongside `murmur`. You can also run `murmurw` yourself any time to launch Murmur without a console window, then close the terminal; it keeps running in the tray. (Plain `murmur` from a terminal ties the app to that window, so closing it quits Murmur.)
+A `murmur` you start in a terminal is tied to that window, so closing it quits. The startup toggle avoids that by launching Murmur from the system, with no terminal involved.
+
+- **Windows**: the install also created `murmurw`, a windowless launcher. Run `murmurw` yourself any time to start Murmur with no console window, then close the terminal and it stays in the tray.
+- **macOS**: `murmurw` and `murmur` are the same command, so use the login toggle to run without a terminal. To start the background copy right now without logging out, run `launchctl kickstart -k gui/$(id -u)/com.murmur.dictation`. Open the settings from the menu bar or with `murmur --settings` (it attaches to the running copy) rather than launching `murmur` again, which would start a second instance.
 
 - **Windows**: the toggle writes a per-user startup entry pointing at `murmurw.exe`. Nothing shows on screen but the tray icon.
 - **macOS**: the toggle installs a LaunchAgent and loads it. One caveat: launched this way, macOS sees a new launcher, so it asks once more for Microphone, Input Monitoring, and Accessibility. Grant them and you are set.
 
 ## Troubleshooting
 
+- **`uv tool install` fails with "Permission denied" on `~/.cache`** (macOS/Linux): the cache directory is owned by root, usually left behind by an earlier `sudo`. Take it back with `sudo chown -R "$(whoami)" ~/.cache` (and `~/.local` if that one complains too), then reinstall.
 - **Hotkey does nothing (macOS)**: Input Monitoring permission is missing. `murmur --doctor` confirms it; grant it to your terminal and restart Murmur.
 - **Nothing pastes (macOS)**: same story with the Accessibility permission.
+- **The hotkey or pasting stops after an update (macOS)**: macOS ties Input Monitoring and Accessibility to the exact program, and `uv tool install --reinstall` can reset them. Re-grant in System Settings > Privacy & Security; `murmur --doctor` shows what is missing.
+- **A key you rebound to does nothing (macOS)**: some top-row F-keys are media keys (volume, brightness) that Murmur cannot see. Hold Fn while pressing it, enable "Use F1, F2, etc. keys as standard function keys" in System Settings, or pick a bare modifier like `cmd_r`.
 - **An app rejects the paste** (some terminals, password fields): set `"paste": false` to type the text instead.
 - **Clipboard contents vanished**: Murmur restores text clipboards after pasting, but images and files are lost. Set `restore_clipboard_ms` to `-1` if you would rather keep the transcript on the clipboard.
 - **Model download failed midway**: rerun `murmur --download`; it resumes.
