@@ -22,14 +22,13 @@ from typing import Callable
 
 log = logging.getLogger("murmur")
 
-WIDTH, HEIGHT = 132, 52
-BARS = 9
+WIDTH, HEIGHT = 46, 18  # compact pill, ~1/3 the old 132x52; dot removed (0.5.6)
+BARS = 7
 KEY = "#08090b"  # transparency key color (Windows) / plain background elsewhere
 CAPSULE = "#17191d"
 BORDER = "#2b2f36"
-REC = "#e5484d"
-ACCENT = "#38bdf8"
-DIM = "#5b6470"
+ACCENT = "#38bdf8"  # recording bars (sky)
+DIM = "#5b6470"  # transcribing shimmer bars
 
 
 def supported() -> bool:
@@ -171,32 +170,51 @@ class Pill:
             log.debug("pill draw failed: %s", e)
         self._root.after(40, self._loop)  # ~25 fps, scheduled on the Tk thread
 
-    def _rounded(self, x0, y0, x1, y1, r, **kw) -> None:
-        c = self._canvas
-        c.create_arc(x0, y0, x0 + 2 * r, y0 + 2 * r, start=90, extent=90, style="pieslice", **kw)
-        c.create_arc(x1 - 2 * r, y0, x1, y0 + 2 * r, start=0, extent=90, style="pieslice", **kw)
-        c.create_arc(x0, y1 - 2 * r, x0 + 2 * r, y1, start=180, extent=90, style="pieslice", **kw)
-        c.create_arc(x1 - 2 * r, y1 - 2 * r, x1, y1, start=270, extent=90, style="pieslice", **kw)
-        c.create_rectangle(x0 + r, y0, x1 - r, y1, **kw)
-        c.create_rectangle(x0, y0 + r, x1, y1 - r, **kw)
+    def _capsule(self) -> None:
+        """The pill as one filled polygon, so the border is a single clean
+        stroke instead of overlapping arcs and rectangles (which seam at their
+        joins and look fuzzy). Trace the perimeter clockwise, a quarter-circle
+        per corner, with fully rounded ends (stadium). No anti-aliasing on
+        purpose: Tk has none, and AA edges would fringe against the Windows
+        transparency key."""
+        import math
+
+        pad = 1
+        x0, y0, x1, y1 = pad, pad, WIDTH - pad, HEIGHT - pad
+        r = (y1 - y0) / 2
+        steps = 8
+        corners = (
+            (x1 - r, y0 + r, -math.pi / 2),  # top-right
+            (x1 - r, y1 - r, 0.0),  # bottom-right
+            (x0 + r, y1 - r, math.pi / 2),  # bottom-left
+            (x0 + r, y0 + r, math.pi),  # top-left
+        )
+        pts = []
+        for cx, cy, start in corners:
+            for s in range(steps + 1):
+                a = start + (math.pi / 2) * (s / steps)
+                pts.extend((cx + r * math.cos(a), cy + r * math.sin(a)))
+        self._canvas.create_polygon(pts, fill=CAPSULE, outline=BORDER, width=1)
 
     def _draw(self) -> None:
         import math
 
         c = self._canvas
         c.delete("all")
-        self._rounded(1, 1, WIDTH - 1, HEIGHT - 1, 18, fill=CAPSULE, outline=BORDER, width=1)
+        self._capsule()
 
         recording = self._mode == "recording"
         self._phase += 0.35
         level = max(0.05, min(1.0, self._level())) if recording else 0.0
 
-        # No text: the red dot means recording, the blue dot means transcribing,
-        # and the bars carry the motion.
-        dot = REC if recording else ACCENT
-        c.create_oval(18, HEIGHT / 2 - 4, 26, HEIGHT / 2 + 4, fill=dot, outline="")
-
-        bx0, mid, bw, gap = 38, HEIGHT / 2, 5, 4
+        # Just the bars now (no dot): sky and voice-driven while recording, a
+        # dim traveling shimmer while transcribing. Centered in the pill.
+        mid = HEIGHT / 2
+        bw, gap = 3, 2
+        span = BARS * bw + (BARS - 1) * gap
+        bx0 = (WIDTH - span) / 2
+        max_h = HEIGHT - 8
+        color = ACCENT if recording else DIM
         for i in range(BARS):
             if recording:
                 wobble = 0.55 + 0.45 * math.sin(self._phase + i * 0.9)
@@ -204,8 +222,7 @@ class Pill:
             else:  # transcribing: a gentle traveling shimmer
                 target = 0.25 + 0.22 * math.sin(self._phase * 0.6 + i * 0.7)
             self._bar_h[i] += (target - self._bar_h[i]) * 0.4
-            h = max(3.0, self._bar_h[i] * (HEIGHT - 20))
+            h = max(2.0, self._bar_h[i] * max_h)
             x = bx0 + i * (bw + gap)
-            color = ACCENT if recording else DIM
             c.create_rectangle(x, mid - h / 2, x + bw, mid + h / 2, fill=color, outline="")
 
