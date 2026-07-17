@@ -162,7 +162,13 @@ A `murmur` you start in a terminal is tied to that window, so closing it quits. 
 cd murmur
 uv run murmur -v --no-tray   # run from source, terminal only
 uv run murmur --doctor
+uv run pytest                # run the test suite
 ```
+
+The tests cover the pure logic (spoken-form formatting, the dictionary,
+audio chunking, config, sound cues) and the recording pill, and skip the
+display-dependent hotkey checks when there is no X server. They also run in
+CI on every change under `murmur/`.
 
 ## Credits
 
