@@ -11,11 +11,12 @@ log = logging.getLogger("murmur")
 SR = 44100
 VOLUME = 0.15  # global ceiling; per-cue gain scales below this
 
-# (frequency Hz, duration ms) sequences. The "start" cue is deliberately low
-# and soft (it plays every time you begin talking); the sharper, higher cues
-# are for the moments you want to notice (cancel, error).
+# (frequency Hz, duration ms) sequences. The "ready" and "start" cues are
+# deliberately low and warm (ready greets you once at launch; start plays every
+# time you begin talking); the sharper, higher cues are for the moments you want
+# to notice (cancel, error).
 CUES: dict[str, list[tuple[float, int]]] = {
-    "ready": [(523, 80), (659, 110)],
+    "ready": [(262, 90), (392, 130)],  # C -> G, warm rise in the start/stop register
     "start": [(196, 80), (262, 120)],  # low G -> C, gentle rise
     "stop": [(330, 60), (247, 70)],
     "cancel": [(300, 90), (220, 110)],
@@ -24,11 +25,11 @@ CUES: dict[str, list[tuple[float, int]]] = {
 # Per-cue loudness relative to VOLUME. The start cue is the quietest since it
 # fires constantly; keep the alerts full so they still cut through.
 GAINS: dict[str, float] = {
-    "ready": 0.75,
+    "ready": 0.5,
     "start": 0.4,
     "stop": 0.5,
-    "cancel": 0.7,
-    "error": 0.9,
+    "cancel": 0.6,
+    "error": 0.75,
 }
 
 
