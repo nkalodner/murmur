@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from typing import Callable
 
 log = logging.getLogger("murmur")
@@ -89,6 +90,17 @@ class Tray:
 
     def run(self, on_ready: Callable[[], None]) -> None:
         """Blocks the calling thread until Quit. macOS requires this on the main thread."""
+        if sys.platform == "darwin":
+            # Menu-bar app only: without this the AppKit loop puts a "Python"
+            # icon in the Dock. Must run on the main thread before icon.run().
+            try:
+                import AppKit
+
+                AppKit.NSApplication.sharedApplication().setActivationPolicy_(
+                    AppKit.NSApplicationActivationPolicyAccessory
+                )
+            except Exception as e:
+                log.debug("could not hide the Dock icon: %s", e)
 
         def setup(icon):
             icon.visible = True
