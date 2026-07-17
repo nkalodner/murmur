@@ -53,9 +53,12 @@ class Injector:
             kb.tap("v")
         if previous is not None and self.restore_clipboard_ms >= 0:
 
-            def restore(value: str = previous) -> None:
+            def restore(value: str = previous, mine: str = text) -> None:
                 try:
-                    pyperclip.copy(value)
+                    # Only put the old clipboard back if nothing new was copied
+                    # while we held it; otherwise we'd clobber the fresh copy.
+                    if pyperclip.paste() == mine:
+                        pyperclip.copy(value)
                 except Exception as e:
                     log.debug("clipboard restore failed: %s", e)
 
