@@ -1,10 +1,12 @@
 """Start Murmur when you log in. Per-user, no admin, fully reversible.
 
-- Windows: an HKCU ...\\Run registry value pointing at the windowless
-  launcher (murmurw.exe). Some antivirus / "startup manager" tools silently
-  revert Run-key changes made by apps they do not recognize, so enable() reads
-  the value back and, if it vanished, falls back to a shortcut in the Startup
-  folder before giving up with a clear error. It never reports a success that
+- Windows: a shortcut to the windowless launcher (murmurw.exe) in the Startup
+  folder, with an HKCU ...\\Run registry value as a fallback. Some antivirus /
+  "startup manager" tools silently revert Run-key changes from apps they do not
+  recognize but leave the Startup folder alone (a sibling app like Wispr Flow
+  persists there untouched), so enable() leads with the shortcut and only uses
+  the Run key if the shortcut is blocked. It verifies whichever it wrote and
+  raises a clear error if both are reverted, so it never reports a success that
   did not actually happen.
 - macOS: a LaunchAgent plist in ~/Library/LaunchAgents, loaded with launchctl.
 - Linux: unsupported (the app runs there for tests, but has no login story).
@@ -26,17 +28,17 @@ MAC_LABEL = "com.murmur.dictation"
 WIN_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 WIN_VALUE = "Murmur"
 
-# Shown when both the Run key and the Startup folder shortcut are reverted the
+# Shown when both the Startup folder shortcut and the Run key are reverted the
 # instant they are written. That is almost always a security tool, so point the
 # user at the fix instead of leaving them to guess (the exact hole this whole
 # feature fell into once).
 _WIN_BLOCKED_MSG = (
-    "Windows removed Murmur's startup entry right after it was written, and a "
-    "Startup folder shortcut did not stick either. This is almost always "
-    "antivirus or a 'startup manager' blocking startup changes from an app it "
-    "does not recognize. Allow Murmur (murmurw.exe) in that tool, or add the "
-    "shortcut by hand: press Win+R, run 'shell:startup', and drop a shortcut to "
-    "murmurw.exe in the folder that opens."
+    "Windows removed Murmur's startup entry right after it was written (both a "
+    "Startup folder shortcut and the registry Run key were reverted). This is "
+    "almost always antivirus or a 'startup manager' blocking startup changes "
+    "from an app it does not recognize. Allow Murmur (murmurw.exe) in that "
+    "tool, or add the shortcut by hand: press Win+R, run 'shell:startup', and "
+    "drop a shortcut to murmurw.exe in the folder that opens."
 )
 
 
@@ -107,22 +109,26 @@ def disable() -> None:
 
 
 def _win_enable(exe: str) -> None:
-    """Write the Run key, verify it survived, and fall back to a Startup-folder
-    shortcut if something reverted it. Raise if neither sticks, so the caller
-    never reports a success that did not happen."""
-    _win_write_run(exe)
-    if _win_run_value() is not None:
-        log.info("Start at login enabled (Run key)")
-        return
-    # The registry write did not survive, so something is reverting it. Try the
-    # Startup folder, which some of those tools leave alone.
-    log.warning("Run-key startup entry was reverted; trying a Startup folder shortcut")
+    """Prefer a Startup-folder shortcut, fall back to the Run key, and raise if
+    both are reverted. Security "startup manager" tools watch the Run key far
+    more aggressively than the Startup folder (a sibling app like Wispr Flow
+    persists there untouched), so leading with the shortcut dodges the revert
+    instead of racing it. Never report a success that did not happen."""
     try:
         _win_create_shortcut(exe)
     except Exception as e:
-        raise RuntimeError(_WIN_BLOCKED_MSG) from e
+        log.debug("shortcut creation raised: %s", e)
     if _win_startup_shortcut().exists():
+        # Drop any old Run-key entry so login does not launch Murmur twice.
+        _win_delete_run()
         log.info("Start at login enabled (Startup folder)")
+        return
+    # The Startup folder was blocked too; try the Run key as a fallback.
+    log.warning("Startup folder shortcut did not stick; trying the Run key")
+    _win_startup_shortcut().unlink(missing_ok=True)
+    _win_write_run(exe)
+    if _win_run_value() is not None:
+        log.info("Start at login enabled (Run key)")
         return
     raise RuntimeError(_WIN_BLOCKED_MSG)
 
