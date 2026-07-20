@@ -75,7 +75,7 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 - **Behavior**: chimes, paste versus type, trailing space, history, the recording pill, max recording length, tap-lock window, clipboard restore delay. The start-recording cue is a soft low tone; the Play button next to it previews it.
 - **Recording pill**: a small always-on-top overlay near the bottom of the screen while you talk, just a status dot and bars that move to your voice, no text (Windows and Linux; macOS shows the tray dot instead, since Tk can't share the menu-bar thread). Toggle it under Behavior.
 - **Auto-format speech**: spoken times, dates, and numbers come out written. "one pm" types as `1:00 PM`, "three oh five p.m." as `3:05 PM`, "july third" as `July 3rd`, "fifty percent" as `50%`, "twenty dollars" as `$20`, "twenty five" as `25`. Deliberately conservative: anything ambiguous ("five thirty" with no am/pm) stays as spoken, and "which one am I" is never mangled. Toggle under Behavior.
-- **Model**: switch models or precision. A new model downloads on first use and loads on the next dictation.
+- **Model**: pick from the menu (Parakeet v2/v3, Whisper base, Canary 1B v2) or enter any onnx-asr name / Hugging Face repo id via Custom, plus precision and a language code for the models that read one. A new model downloads on first use and loads on the next dictation. See [Choosing a model](#choosing-a-model).
 - **Startup**: Open Murmur at login (Windows and macOS). See [below](#do-i-need-to-keep-the-terminal-open-start-at-login).
 - **Recent transcripts**: the last few dictations, newest first, for testing dictionary entries.
 
@@ -85,6 +85,13 @@ Two mechanisms, both applied to every transcript before it is pasted:
 
 - **Vocabulary**: words and phrases spelled and cased exactly how you want them typed. Transcripts that come out close snap to your spelling, so "wisper" becomes "Wispr" and "photo globe" becomes "Photoglobe". Ordinary spoken words are left alone, so a short name like "Andi" never rewrites "and" or "and I", and very short entries only snap on a near-exact match. Match sensitivity (`vocab_threshold`) sets how close a word must sound before it snaps; add proper nouns and jargon.
 - **Replacements**: exact heard-to-typed pairs for things the model reliably mishears the same way, like "cloud code" becoming "Claude Code". Matched case-insensitively on word boundaries.
+
+Built a dictionary on one machine and setting up another? **Export dictionary** on the settings page writes every word and replacement to a small JSON file; **Import dictionary** on the other device folds it in. Imports merge: duplicates are skipped and the importing device's own entries always win, so it is safe to run in either direction (and it accepts a whole `config.json` too, if that is what you have). The same works from the terminal:
+
+```
+murmur --export-dictionary               # writes murmur-dictionary.json here
+murmur --import-dictionary murmur-dictionary.json
+```
 
 ## Configuration
 
@@ -120,11 +127,22 @@ murmur --settings            # open the settings page
 murmur --enable-autostart    # start at login (also --disable-autostart)
 murmur --list-devices        # list input devices
 murmur --doctor              # check mic, model, permissions, clipboard
+murmur --export-dictionary   # write your dictionary to a file for another device
+murmur --import-dictionary murmur-dictionary.json
 ```
 
-### Other models
+### Choosing a model
 
-`nemo-parakeet-tdt-0.6b-v2` is English only and currently the best quality per CPU cycle. `nemo-parakeet-tdt-0.6b-v3` is the multilingual version (25 European languages). Any model [onnx-asr](https://github.com/istupakov/onnx-asr) supports will work, including `whisper-base`.
+The settings page offers four directly; all run fully local through [onnx-asr](https://github.com/istupakov/onnx-asr):
+
+| Model | Languages | Download | Why pick it |
+| --- | --- | --- | --- |
+| `nemo-parakeet-tdt-0.6b-v2` | English | ~700 MB | The default. Best accuracy for its speed on a CPU. |
+| `nemo-parakeet-tdt-0.6b-v3` | 25 European languages | ~700 MB | Same family and speed as v2, auto-detects the language. |
+| `whisper-base` | 99 languages | ~80 MB | Lightest and quickest to try, widest language list, noticeably softer accuracy. Set a language code if it guesses wrong. |
+| `nemo-canary-1b-v2` | 25 European languages | ~1 GB | The most accurate multilingual option, with a longer pause after speaking on CPU. |
+
+The Custom field takes anything else onnx-asr can load: its other aliases (the GigaAM and FastConformer families for Russian, `nemo-parakeet-ctc-0.6b`, and so on) or any Hugging Face repo id with a slash, like `onnx-community/whisper-large-v3-turbo` for Whisper's strongest open model. Two notes on custom repos: not all of them ship int8 files, so switch quantization to full precision if the load fails, and bigger Whisper models get slow on a CPU. The `language` setting (two letters, like `en`) is read by Whisper and Canary; Parakeet ignores it.
 
 ## Do I need to keep the terminal open? Start at login
 

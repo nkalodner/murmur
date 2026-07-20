@@ -145,6 +145,16 @@
         <span>Match sensitivity<span class="sub">How close a word must sound before it snaps to your vocabulary. Left catches more, right is stricter.</span></span>
         <span class="row" style="gap:8px"><input type="range" id="threshold" min="0.70" max="0.95" step="0.01"><span id="thresholdVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">0.82</span></span>
       </div>
+
+      <div class="kicker" style="letter-spacing:.12em;margin-top:20px">Move between devices</div>
+      <p class="hint" style="margin-top:4px">Export writes every word and replacement to a small file. Import reads
+      that file on another device and folds it in: duplicates are skipped and this device's entries always win, so
+      importing never loses anything.</p>
+      <div class="row" style="margin-top:10px">
+        <button id="dictExport" type="button">Export dictionary</button>
+        <button id="dictImport" type="button">Import dictionary</button>
+        <input type="file" id="dictFile" accept=".json,application/json" style="display:none">
+      </div>
     </div>
   </section>
 
@@ -180,19 +190,20 @@
     <span class="kicker">Model</span>
     <div class="panel">
       <div class="row">
-        <input type="text" id="model" list="modelList" style="flex:1">
-        <datalist id="modelList">
-          <option value="nemo-parakeet-tdt-0.6b-v2">English, the default</option>
-          <option value="nemo-parakeet-tdt-0.6b-v3">Multilingual, 25 European languages</option>
-          <option value="whisper-base">Whisper base, small and quick</option>
-        </datalist>
+        <select id="modelSelect" style="flex:1"></select>
         <select id="quantization">
           <option value="int8">int8 (fast, default)</option>
           <option value="">full precision</option>
         </select>
       </div>
-      <p class="hint">Changing the model downloads it on first use (roughly 700 MB for Parakeet) and loads it on your next
-      dictation, so that one will be slow.</p>
+      <div class="row" id="modelCustomRow" style="display:none;margin-top:8px">
+        <input type="text" id="modelCustom" placeholder="onnx-asr model name or Hugging Face repo id" style="flex:1">
+      </div>
+      <p class="hint" id="modelHint"></p>
+      <div class="num" style="margin-top:6px">
+        <span>Language code<span class="sub" id="languageSub">Two letters, like en or de. Whisper and Canary read it; Parakeet ignores it (v3 detects on its own). Blank = auto.</span></span>
+        <input type="text" id="language" placeholder="auto" style="width:90px">
+      </div>
     </div>
   </section>
 
@@ -325,19 +336,60 @@ function renderPairs() {
   });
 }
 
+// The curated model menu arrives with /api/state; anything else is Custom.
+let models = [];
+
+function renderModelPicker() {
+  const sel = $("modelSelect");
+  sel.innerHTML = "";
+  for (const m of models) {
+    const opt = document.createElement("option");
+    opt.value = m.name;
+    opt.textContent = `${m.label} · ${m.languages} · ${m.download}`;
+    sel.appendChild(opt);
+  }
+  const custom = document.createElement("option");
+  custom.value = "__custom__";
+  custom.textContent = "Custom (any onnx-asr model or Hugging Face repo)…";
+  sel.appendChild(custom);
+
+  const known = models.find((m) => m.name === cfg.model);
+  sel.value = known ? cfg.model : "__custom__";
+  $("modelCustomRow").style.display = known ? "none" : "flex";
+  if (!known) $("modelCustom").value = cfg.model;
+  updateModelHint();
+}
+
+function updateModelHint() {
+  const known = models.find((m) => m.name === cfg.model);
+  if (known) {
+    $("modelHint").textContent =
+      `${known.note} Downloads ${known.download} on first use and loads on your next dictation, so that one will be slow.`;
+  } else {
+    $("modelHint").textContent =
+      "Any model this install of onnx-asr can load: a known name, or a Hugging Face repo id like " +
+      "onnx-community/whisper-large-v3-turbo. If a repo has no int8 files, switch quantization to full precision.";
+  }
+  // Parakeet ignores the language code, so only light the field up where
+  // it does something (custom models might, so leave it open there).
+  $("language").disabled = !!known && !known.uses_language;
+}
+
 function renderAll(state) {
   renderStatus(state);
   cfg = JSON.parse(JSON.stringify(state.config));
   cfg.vocabulary = cfg.vocabulary || [];
   cfg.replacements = (cfg.replacements || []).map((p) => ({ from: p.from || "", to: p.to || "" }));
   devices = state.devices || [];
+  models = state.models || [];
   $("keycap").textContent = cfg.hotkey;
   renderDevices(); renderVocab(); renderPairs();
   for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting"]) $(id).checked = !!cfg[id];
   for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"]) $(id).value = cfg[id];
   $("threshold").value = cfg.vocab_threshold;
   $("thresholdVal").textContent = Number(cfg.vocab_threshold).toFixed(2);
-  $("model").value = cfg.model;
+  renderModelPicker();
+  $("language").value = cfg.language || "";
   $("quantization").value = cfg.quantization || "";
   // Startup is applied immediately (an OS-level, per-machine action), so it
   // lives outside the Save flow and reflects the real system state.
@@ -425,8 +477,53 @@ $("threshold").addEventListener("input", () => {
   $("thresholdVal").textContent = cfg.vocab_threshold.toFixed(2);
   setDirty(true);
 });
-$("model").addEventListener("input", () => { cfg.model = $("model").value.trim(); setDirty(true); });
+$("modelSelect").addEventListener("change", () => {
+  const v = $("modelSelect").value;
+  if (v === "__custom__") {
+    $("modelCustomRow").style.display = "flex";
+    $("modelCustom").value = cfg.model;
+    $("modelCustom").focus();
+  } else {
+    $("modelCustomRow").style.display = "none";
+    cfg.model = v;
+    setDirty(true);
+  }
+  updateModelHint();
+});
+$("modelCustom").addEventListener("input", () => {
+  cfg.model = $("modelCustom").value.trim();
+  setDirty(true);
+  updateModelHint();
+});
+$("language").addEventListener("input", () => { cfg.language = $("language").value.trim() || null; setDirty(true); });
 $("quantization").addEventListener("change", () => { cfg.quantization = $("quantization").value || null; setDirty(true); });
+
+// ---- dictionary transfer --------------------------------------------------
+$("dictExport").addEventListener("click", () => { window.location.href = "/api/dictionary"; });
+$("dictImport").addEventListener("click", () => {
+  if (dirty) { msg("Save or revert your changes first, then import.", "err"); return; }
+  $("dictFile").click();
+});
+$("dictFile").addEventListener("change", async () => {
+  const file = $("dictFile").files[0];
+  $("dictFile").value = "";
+  if (!file) return;
+  let data;
+  try { data = JSON.parse(await file.text()); }
+  catch { msg("That file isn't JSON. Export it from Murmur's settings on the other device.", "err"); return; }
+  try {
+    const res = await fetch("/api/dictionary", { method: "POST", headers: HEADERS, body: JSON.stringify(data) });
+    const out = await res.json();
+    if (!res.ok) { msg(out.error || "Import failed.", "err"); return; }
+    await loadState();
+    msg(
+      out.added_words || out.added_pairs
+        ? `Imported ${out.added_words} word${out.added_words === 1 ? "" : "s"} and ${out.added_pairs} replacement${out.added_pairs === 1 ? "" : "s"}. Everything applies to your next dictation.`
+        : "Nothing new in that file. Every entry was already on this device.",
+      "ok",
+    );
+  } catch { renderOffline(); }
+});
 
 $("testSound").addEventListener("click", () => {
   fetch("/api/test-sound", { method: "POST", headers: HEADERS, body: JSON.stringify({ cue: "start" }) }).catch(() => renderOffline());

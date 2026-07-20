@@ -64,6 +64,89 @@ def save(cfg: Config, path: Path = CONFIG_PATH) -> None:
     path.write_text(json.dumps(asdict(cfg), indent=2) + "\n", encoding="utf-8")
 
 
+# ── Dictionary transfer ────────────────────────────────────────────────
+# The personal dictionary is the one part of the config worth carrying to
+# another machine, so it exports as a small standalone file and imports as
+# a merge (existing entries always win, duplicates are skipped).
+
+DICTIONARY_KIND = "murmur-dictionary"
+
+
+def dictionary_payload(cfg: Config) -> dict:
+    """The portable dictionary file: what export writes and import reads.
+
+    vocab_threshold rides along for reference, but import leaves the
+    local tuning alone.
+    """
+    return {
+        "kind": DICTIONARY_KIND,
+        "version": 1,
+        "vocabulary": list(cfg.vocabulary),
+        "replacements": [
+            {"from": p.get("from", ""), "to": p.get("to", "")} for p in cfg.replacements
+        ],
+        "vocab_threshold": cfg.vocab_threshold,
+    }
+
+
+def extract_dictionary(data) -> tuple[list[str], list[dict]]:
+    """Pull (vocabulary, replacements) out of an uploaded JSON object.
+
+    Accepts a dictionary export or a whole config.json — anything carrying
+    the two keys. Raises ValueError with a readable message otherwise.
+    Empty entries and pairs with an empty "from" are dropped.
+    """
+    if not isinstance(data, dict):
+        raise ValueError("expected a JSON object (a Murmur dictionary export)")
+    vocab = data.get("vocabulary", [])
+    repl = data.get("replacements", [])
+    if not isinstance(vocab, list) or not all(isinstance(v, str) for v in vocab):
+        raise ValueError("vocabulary must be a list of strings")
+    if not isinstance(repl, list) or not all(
+        isinstance(p, dict)
+        and isinstance(p.get("from", ""), str)
+        and isinstance(p.get("to", ""), str)
+        for p in repl
+    ):
+        raise ValueError('replacements must be a list of {"from": ..., "to": ...} objects')
+    words = [v.strip() for v in vocab if v.strip()]
+    pairs = [
+        {"from": p.get("from", "").strip(), "to": p.get("to", "")}
+        for p in repl
+        if p.get("from", "").strip()
+    ]
+    if not words and not pairs:
+        raise ValueError(
+            "no vocabulary or replacements found in that file — "
+            "export one from Murmur's settings page on the other device"
+        )
+    return words, pairs
+
+
+def merge_dictionary(cfg: Config, vocab: list[str], repl: list[dict]) -> tuple[int, int]:
+    """Fold imported entries into cfg in place; returns (words, pairs) added.
+
+    Case-insensitive dedupe, and this machine's entries always win — a
+    replacement whose "from" already exists here keeps the local "to".
+    """
+    have_words = {v.lower() for v in cfg.vocabulary}
+    words_added = 0
+    for word in vocab:
+        if word.lower() not in have_words:
+            cfg.vocabulary.append(word)
+            have_words.add(word.lower())
+            words_added += 1
+    have_from = {p.get("from", "").strip().lower() for p in cfg.replacements}
+    pairs_added = 0
+    for pair in repl:
+        key = pair["from"].lower()
+        if key not in have_from:
+            cfg.replacements.append({"from": pair["from"], "to": pair["to"]})
+            have_from.add(key)
+            pairs_added += 1
+    return words_added, pairs_added
+
+
 def _int_in(name: str, value, lo: int, hi: int) -> None:
     if isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
         raise ValueError(f"{name} must be a whole number between {lo} and {hi}")

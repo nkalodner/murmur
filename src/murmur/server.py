@@ -54,12 +54,20 @@ class SettingsServer:
             def log_message(self, fmt, *args):  # keep the terminal quiet
                 log.debug("settings: " + fmt, *args)
 
-            def _send(self, status: int, body: bytes, ctype: str) -> None:
+            def _send(
+                self,
+                status: int,
+                body: bytes,
+                ctype: str,
+                extra: dict[str, str] | None = None,
+            ) -> None:
                 self.send_response(status)
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(body)))
                 self.send_header("Cache-Control", "no-store")
                 self.send_header("X-Content-Type-Options", "nosniff")
+                for name, value in (extra or {}).items():
+                    self.send_header(name, value)
                 self.end_headers()
                 self.wfile.write(body)
 
@@ -84,6 +92,16 @@ class SettingsServer:
                     self._json(200, {"app": "murmur", "version": __version__, **app.snapshot()})
                 elif path == "/api/history":
                     self._json(200, {"entries": read_history_tail()})
+                elif path == "/api/dictionary":
+                    # The export download: the browser saves it as a file
+                    # thanks to the attachment disposition.
+                    body = json.dumps(app.dictionary_export(), indent=2).encode("utf-8")
+                    self._send(
+                        200,
+                        body,
+                        "application/json",
+                        {"Content-Disposition": 'attachment; filename="murmur-dictionary.json"'},
+                    )
                 else:
                     self._json(404, {"error": "not found"})
 
@@ -146,6 +164,17 @@ class SettingsServer:
                     except Exception as e:
                         log.debug("mic test failed: %s", e)
                         self._json(400, {"error": f"could not open the microphone: {e}"})
+                        return
+                    self._json(200, result)
+                elif path == "/api/dictionary":
+                    try:
+                        result = app.dictionary_import(data)
+                    except ValueError as e:
+                        self._json(400, {"error": str(e)})
+                        return
+                    except Exception:
+                        log.exception("dictionary import failed")
+                        self._json(500, {"error": "internal error importing the dictionary"})
                         return
                     self._json(200, result)
                 elif path == "/api/autostart":
