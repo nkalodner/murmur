@@ -1,15 +1,15 @@
 # Murmur
 
-Local push-to-talk dictation for macOS and Windows. Hold a key, talk, release, and the words land wherever your cursor is. It replaces a Wispr Flow subscription with NVIDIA's Parakeet speech model running entirely on your machine: free, offline, and nothing you say leaves your computer. MIT licensed.
+Local push-to-talk dictation for macOS and Windows. Hold a key, talk, release, and the words land wherever your cursor is. It replaces a Wispr Flow subscription with speech models running entirely on your machine (NVIDIA's Parakeet by default; Whisper and Canary are a settings pick away): free, offline, and nothing you say leaves your computer. MIT licensed.
 
 I develop Murmur inside my personal site's monorepo, and every change is auto-published to [github.com/nkalodner/murmur](https://github.com/nkalodner/murmur), so the public code always matches what I run.
 
 ## How it works
 
 - A small tray app watches one global hotkey (Right Ctrl by default).
-- Hold the key and speak. Release, and Murmur transcribes with Parakeet and pastes the text into whatever app has focus.
+- Hold the key and speak. Release, and Murmur transcribes on the machine and pastes the text into whatever app has focus.
 - Quick-tap the key instead to record hands-free, then tap again to finish. Esc cancels a recording.
-- Transcription runs on your CPU with the int8 ONNX build of `parakeet-tdt-0.6b-v2`. A ten second sentence takes about a second on a modern laptop, with punctuation and capitalization included.
+- Transcription runs on your CPU, by default with the int8 ONNX build of `parakeet-tdt-0.6b-v2`; Whisper, Canary, and other models are one settings change away (see [Choosing a model](#choosing-a-model)). A ten second sentence takes about a second on a modern laptop with the default, punctuation and capitalization included.
 - A local settings page (tray menu, or `murmur --settings`) handles the hotkey, the mic, a personal dictionary, and everything else. See [Settings](#settings).
 
 ## Install
@@ -194,4 +194,4 @@ CI on every change under `murmur/`.
 
 ## Credits
 
-Speech recognition is [NVIDIA Parakeet TDT 0.6b](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (CC-BY-4.0) via [onnx-asr](https://github.com/istupakov/onnx-asr) and its ONNX exports by Ilya Stupakov. If you ever want a packaged installer with the same idea instead of a Python tool, [Handy](https://handy.computer) is a solid open source option.
+Speech recognition defaults to [NVIDIA Parakeet TDT 0.6b](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) (CC-BY-4.0) and runs through [onnx-asr](https://github.com/istupakov/onnx-asr) and its ONNX exports by Ilya Stupakov, which also power the Whisper, Canary, and other model options. If you ever want a packaged installer with the same idea instead of a Python tool, [Handy](https://handy.computer) is a solid open source option.
