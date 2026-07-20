@@ -18,6 +18,16 @@ def run(cfg: Config) -> int:
     print(f"murmur {__version__} on {platform.platform()} / Python {sys.version.split()[0]}")
     print(f"  config: {CONFIG_PATH}")
     print(f"  model: {cfg.model} ({cfg.quantization or 'fp32'})  hotkey: {cfg.hotkey}")
+    print(
+        f"  dictionary: {len(cfg.vocabulary)} words, {len(cfg.replacements)} replacements"
+        "  (move it with --export-dictionary / --import-dictionary)"
+    )
+
+    from murmur.models import check_model_name
+
+    problem = check_model_name(cfg.model)
+    if problem:
+        _line(False, "model name", problem)
 
     try:
         from murmur.audio import find_input_device, list_input_devices

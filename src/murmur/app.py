@@ -251,6 +251,7 @@ class App:
         except Exception as e:
             log.debug("device listing failed: %s", e)
         from murmur import autostart
+        from murmur.models import KNOWN_MODELS
 
         return {
             "state": state,
@@ -259,6 +260,8 @@ class App:
             "config": cfg,
             "devices": devices,
             "autostart": autostart.status(),
+            # The curated menu the settings page renders its picker from.
+            "models": [asdict(m) for m in KNOWN_MODELS],
         }
 
     def apply_config(self, data: dict) -> list[str]:
@@ -281,6 +284,14 @@ class App:
             old = self.cfg
             new = Config(**{**asdict(old), **data})
             validate(new)
+            if new.model != old.model:
+                # Catch a name onnx-asr would refuse NOW, not on the next
+                # dictation (which would just quietly fail to load).
+                from murmur.models import check_model_name
+
+                problem = check_model_name(new.model)
+                if problem:
+                    raise ValueError(problem)
             if new.hotkey != old.hotkey:
                 parse_hotkey(new.hotkey)
             device_index = self._device
@@ -350,6 +361,36 @@ class App:
         else:
             autostart.disable()
         return autostart.status()
+
+    # -- dictionary transfer (settings page Export/Import) ----------------
+
+    def dictionary_export(self) -> dict:
+        from murmur.config import dictionary_payload
+
+        with self._lock:
+            return dictionary_payload(self.cfg)
+
+    def dictionary_import(self, data: dict) -> dict:
+        """Merge an uploaded dictionary file into the live config.
+
+        Raises ValueError with a readable message on a bad payload. The
+        dictionary applies to the very next transcript — textproc reads
+        cfg fresh each time, so nothing needs reloading.
+        """
+        from murmur.config import extract_dictionary, merge_dictionary, save
+
+        vocab, repl = extract_dictionary(data)
+        with self._lock:
+            words, pairs = merge_dictionary(self.cfg, vocab, repl)
+            if words or pairs:
+                save(self.cfg)
+            return {
+                "ok": True,
+                "added_words": words,
+                "added_pairs": pairs,
+                "total_words": len(self.cfg.vocabulary),
+                "total_pairs": len(self.cfg.replacements),
+            }
 
     def open_settings(self) -> None:
         if self.settings_url:
@@ -450,6 +491,10 @@ class App:
             self.tray.stop()
 
 
+def _n(count: int, noun: str) -> str:
+    return f"{count} {noun}{'' if count == 1 else 's'}"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="murmur",
@@ -484,6 +529,20 @@ def main(argv: list[str] | None = None) -> int:
         "--disable-autostart", action="store_true", help="stop starting at login, then exit"
     )
     parser.add_argument(
+        "--export-dictionary",
+        nargs="?",
+        const="murmur-dictionary.json",
+        metavar="FILE",
+        help="write your vocabulary + replacements to FILE "
+        "(default murmur-dictionary.json) for another device, then exit",
+    )
+    parser.add_argument(
+        "--import-dictionary",
+        metavar="FILE",
+        help="merge vocabulary + replacements from an exported FILE into "
+        "this machine's dictionary, then exit",
+    )
+    parser.add_argument(
         "--doctor", action="store_true", help="check mic, model, permissions, clipboard and exit"
     )
     parser.add_argument("--verbose", "-v", action="store_true")
@@ -514,9 +573,73 @@ def main(argv: list[str] | None = None) -> int:
     logging.getLogger("murmur").setLevel(logging.DEBUG if args.verbose else logging.INFO)
 
     cfg = load()
+
+    # Dictionary transfer runs on the freshly-loaded config, before any
+    # CLI overrides touch it — an import must never persist a --model or
+    # --hotkey given in the same command.
+    if args.export_dictionary:
+        from pathlib import Path
+
+        from murmur.config import dictionary_payload
+
+        out = Path(args.export_dictionary)
+        try:
+            out.write_text(
+                json.dumps(dictionary_payload(cfg), indent=2) + "\n", encoding="utf-8"
+            )
+        except OSError as e:
+            log.error("Could not write %s: %s", out, e)
+            return 1
+        print(
+            f"Wrote {_n(len(cfg.vocabulary), 'word')} and "
+            f"{_n(len(cfg.replacements), 'replacement')} to {out}"
+        )
+        print("On the other device: murmur --import-dictionary, or Import on the settings page.")
+        return 0
+    if args.import_dictionary:
+        from pathlib import Path
+
+        from murmur.config import extract_dictionary, merge_dictionary, save
+
+        try:
+            data = json.loads(Path(args.import_dictionary).read_text(encoding="utf-8"))
+        except OSError as e:
+            log.error("Could not read %s: %s", args.import_dictionary, e)
+            return 1
+        except ValueError:
+            log.error("%s is not JSON. Export it from Murmur on the other device.", args.import_dictionary)
+            return 1
+        try:
+            vocab, repl = extract_dictionary(data)
+        except ValueError as e:
+            log.error("%s", e)
+            return 1
+        words, pairs = merge_dictionary(cfg, vocab, repl)
+        if words or pairs:
+            save(cfg)
+        print(
+            f"Added {_n(words, 'word')} and {_n(pairs, 'replacement')} "
+            f"(now {_n(len(cfg.vocabulary), 'word')}, "
+            f"{_n(len(cfg.replacements), 'replacement')})."
+        )
+        from murmur.server import find_running_instance
+
+        if (words or pairs) and find_running_instance():
+            print(
+                "Murmur is running right now, so restart it to pick these up "
+                "(or use Import on its settings page instead)."
+            )
+        return 0
+
     if args.hotkey:
         cfg.hotkey = args.hotkey
     if args.model:
+        from murmur.models import check_model_name
+
+        problem = check_model_name(args.model)
+        if problem:
+            log.error("%s", problem)
+            return 2
         cfg.model = args.model
     if args.device:
         cfg.device = args.device
