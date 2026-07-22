@@ -7,8 +7,8 @@ Two dictionary mechanisms, applied to every transcript before injection:
   reliably gets wrong in the same way.
 - Vocabulary: words and phrases spelled the way you want them. Each
   transcript is scanned for stretches that sound close (SequenceMatcher on
-  normalized text), and near misses snap to your spelling ("wisper" ->
-  "Wispr", "photo globe" -> "Photoglobe"). Exact matches adopt the
+  normalized text), and near misses snap to your spelling ("pie torch" ->
+  "PyTorch", "photo globe" -> "Photoglobe"). Exact matches adopt the
   dictionary casing too, so add entries cased exactly how they should be
   typed, and stick to proper nouns and jargon rather than everyday words.
 """

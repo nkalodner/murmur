@@ -3,7 +3,7 @@
 - Windows: a shortcut to the windowless launcher (murmurw.exe) in the Startup
   folder, with an HKCU ...\\Run registry value as a fallback. Some antivirus /
   "startup manager" tools silently revert Run-key changes from apps they do not
-  recognize but leave the Startup folder alone (a sibling app like Wispr Flow
+  recognize but leave the Startup folder alone (a sibling app's shortcut
   persists there untouched), so enable() leads with the shortcut and only uses
   the Run key if the shortcut is blocked. It verifies whichever it wrote and
   raises a clear error if both are reverted, so it never reports a success that
@@ -111,7 +111,7 @@ def disable() -> None:
 def _win_enable(exe: str) -> None:
     """Prefer a Startup-folder shortcut, fall back to the Run key, and raise if
     both are reverted. Security "startup manager" tools watch the Run key far
-    more aggressively than the Startup folder (a sibling app like Wispr Flow
+    more aggressively than the Startup folder (a sibling app's shortcut
     persists there untouched), so leading with the shortcut dodges the revert
     instead of racing it. Never report a success that did not happen."""
     try:
