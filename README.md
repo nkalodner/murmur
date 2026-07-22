@@ -1,6 +1,6 @@
 # Murmur
 
-Local push-to-talk dictation for macOS and Windows. Hold a key, talk, release, and the words land wherever your cursor is. It replaces a Wispr Flow subscription with speech models running entirely on your machine (NVIDIA's Parakeet by default; Whisper and Canary are a settings pick away): free, offline, and nothing you say leaves your computer. MIT licensed.
+Local push-to-talk dictation for macOS and Windows. Hold a key, talk, release, and the words land wherever your cursor is. Speech models run entirely on your machine (NVIDIA's Parakeet by default; Whisper and Canary are a settings pick away): free, offline, and nothing you say leaves your computer. MIT licensed.
 
 I develop Murmur inside my personal site's monorepo, and every change is auto-published to [github.com/nkalodner/murmur](https://github.com/nkalodner/murmur), so the public code always matches what I run.
 
@@ -83,7 +83,7 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 
 Two mechanisms, both applied to every transcript before it is pasted:
 
-- **Vocabulary**: words and phrases spelled and cased exactly how you want them typed. Transcripts that come out close snap to your spelling, so "wisper" becomes "Wispr" and "photo globe" becomes "Photoglobe". Ordinary spoken words are left alone, so a short name like "Andi" never rewrites "and" or "and I", and very short entries only snap on a near-exact match. Match sensitivity (`vocab_threshold`) sets how close a word must sound before it snaps; add proper nouns and jargon.
+- **Vocabulary**: words and phrases spelled and cased exactly how you want them typed. Transcripts that come out close snap to your spelling, so "pie torch" becomes "PyTorch" and "photo globe" becomes "Photoglobe". Ordinary spoken words are left alone, so a short name like "Andi" never rewrites "and" or "and I", and very short entries only snap on a near-exact match. Match sensitivity (`vocab_threshold`) sets how close a word must sound before it snaps; add proper nouns and jargon.
 - **Replacements**: exact heard-to-typed pairs for things the model reliably mishears the same way, like "cloud code" becoming "Claude Code". Matched case-insensitively on word boundaries.
 
 Built a dictionary on one machine and setting up another? **Export dictionary** on the settings page writes every word and replacement to a small JSON file; **Import dictionary** on the other device folds it in. Imports merge: duplicates are skipped and the importing device's own entries always win, so it is safe to run in either direction (and it accepts a whole `config.json` too, if that is what you have). The same works from the terminal:
