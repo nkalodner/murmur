@@ -39,7 +39,7 @@ murmur
 Notes:
 
 - If `murmur` is not found after install, run `uv tool update-shell` and open a fresh terminal.
-- To update later: `git -C murmur pull`, then `uv tool install --reinstall ./murmur`.
+- To update later: quit Murmur first so its files are not locked, then `git -C murmur pull` and `uv tool install --reinstall ./murmur`. Relaunch when it finishes. If the reinstall errors out, see [Troubleshooting](#troubleshooting).
 - To remove: `uv tool uninstall murmur-dictation`, then delete `~/.murmur` and the model in `~/.cache/huggingface`.
 
 ### First run
@@ -166,6 +166,14 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 ## Troubleshooting
 
 - **`uv tool install` fails with "Permission denied" on `~/.cache`** (macOS/Linux): the cache directory is owned by root, usually left behind by an earlier `sudo`. Take it back with `sudo chown -R "$(whoami)" ~/.cache` (and `~/.local` if that one complains too), then reinstall.
+- **A reinstall fails with "Invalid environment ... missing Python executable", or "Access is denied" on Windows**: uv cannot repair the tool's environment in place, either because it was left half-written (the managed Python it used moved) or because Murmur is still running and Windows has its files locked. Quit Murmur completely first: right-click the tray or menu-bar icon and choose Quit (if it starts at login it may be running on its own). Then remove it and install fresh:
+  - Any platform: `uv tool uninstall murmur-dictation`, then run your install line again (`uv tool install ./murmur`, or the archive URL if that is how you installed).
+  - Windows, if the uninstall still reports "Access is denied": a copy is still holding the files. Stop it and clear the folder in PowerShell, then install again:
+    ```powershell
+    Get-Process murmur*,python*,pythonw* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*uv\tools\murmur-dictation*" } | Stop-Process -Force
+    Remove-Item -Recurse -Force "$env:APPDATA\uv\tools\murmur-dictation"
+    ```
+    If it still will not delete, reboot and run those lines before opening anything else. Your settings (`~/.murmur`) and the downloaded model are untouched.
 - **Hotkey does nothing (macOS)**: Input Monitoring permission is missing. `murmur --doctor` confirms it; grant it to your terminal and restart Murmur.
 - **Nothing pastes (macOS)**: same story with the Accessibility permission.
 - **The hotkey or pasting stops after an update (macOS)**: macOS ties Input Monitoring and Accessibility to the exact program, and `uv tool install --reinstall` can reset them. Re-grant in System Settings > Privacy & Security; `murmur --doctor` shows what is missing.
