@@ -6,7 +6,8 @@ I develop Murmur inside my personal site's monorepo, and every change is auto-pu
 
 ## How it works
 
-- A small tray app watches one global hotkey (Right Ctrl by default).
+- A small tray app watches a global hotkey (Right Ctrl by default), plus an optional second one you can set to a key combination.
+- Only one copy runs at a time. Starting a second one exits with a note instead, since two would type every dictation twice.
 - Hold the key and speak. Release, and Murmur transcribes on the machine and pastes the text into whatever app has focus.
 - Quick-tap the key instead to record hands-free, then tap again to finish. Esc cancels a recording.
 - Transcription runs on your CPU, by default with the int8 ONNX build of `parakeet-tdt-0.6b-v2`; Whisper, Canary, and other models are one settings change away (see [Choosing a model](#choosing-a-model)). A ten second sentence takes about a second on a modern laptop with the default, punctuation and capitalization included.
@@ -39,7 +40,7 @@ murmur
 Notes:
 
 - If `murmur` is not found after install, run `uv tool update-shell` and open a fresh terminal.
-- To update later: quit Murmur first so its files are not locked, then `git -C murmur pull` and `uv tool install --reinstall ./murmur`. Relaunch when it finishes. If the reinstall errors out, see [Troubleshooting](#troubleshooting).
+- To update later: quit Murmur first so its files are not locked, then `git -C murmur pull` and `uv tool install --reinstall ./murmur`. Relaunch when it finishes. [What's new](#whats-new) lists what changed in each version; if the reinstall errors out, see [Troubleshooting](#troubleshooting).
 - To remove: `uv tool uninstall murmur-dictation`, then delete `~/.murmur` and the model in `~/.cache/huggingface`.
 
 ### First run
@@ -53,11 +54,49 @@ Notes:
 
 `murmur --doctor` checks mic, model cache, permissions, and clipboard in one pass.
 
+## What's new
+
+Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
+
+### 0.7.0
+
+- **Only one copy runs at a time.** Starting Murmur while it is already running now exits with a note pointing at the copy you have. Two copies each transcribed and pasted the same speech, so everything got typed twice. Most common when Murmur starts at login and you also launch it in a terminal.
+- **A second hotkey, and hotkeys can be combinations.** Set an optional second binding that also starts dictation, so either key works. It can be one key or two or three held together, like `cmd+shift`. The original single key stays the default and keeps working. See [Settings](#settings).
+- **Quiet other audio while you talk.** Optional: the system volume drops while you are recording and returns to the exact level afterward, so dictating over a video does not fight the speaker. Off by default, under Behavior. macOS and Windows.
+
+### 0.6.0
+
+- **A real model menu.** Pick Parakeet v2 (the default), Parakeet v3 for 25 languages, Whisper base (80 MB, 99 languages), or Canary 1B v2, or type any other onnx-asr name or Hugging Face repo id. A bad name is now caught when you save it. See [Choosing a model](#choosing-a-model).
+- **Your dictionary moves between machines.** Export it to a small file on one computer and import it on another; merges skip duplicates and never overwrite the entries already there. Also `murmur --export-dictionary` / `--import-dictionary`.
+
+### 0.5.x
+
+- **Auto-format speech** (0.5.0): spoken times, dates, percents, and dollars come out written, so "one pm" types as `1:00 PM`. Deliberately conservative about anything ambiguous.
+- **A slimmer, smoother recording pill** on Windows and Linux (0.5.6, 0.5.7): just the bars that move with your voice, with properly rounded edges.
+- **Start-at-login got more reliable on Windows** (0.5.8, 0.5.9): it now leads with a Startup-folder shortcut, which the antivirus and "startup manager" tools that quietly revert registry entries tend to leave alone.
+- **macOS fixes**: changing the hotkey no longer quits the app (0.5.1), no stray Dock icon (0.5.2), the start chime stopped crackling (0.5.4), and both permission prompts now appear so you can grant them from the dialog instead of hunting for the binary (0.5.5).
+- **Copying while Murmur pasted no longer lost your clipboard** (0.5.3).
+
+### 0.4.0
+
+- **The recording pill**: a small always-on-top overlay with live level bars while you talk (Windows and Linux).
+- **The dictionary stopped over-reaching**: a short name like "Andi" no longer rewrites every "and" and "and I".
+
+### 0.3.0
+
+- **Start at login**, with a windowless launcher (`murmurw`) so Murmur runs from the tray with no terminal open.
+- **Test mic** in the settings page, and a softer start chime.
+
+### 0.2.0
+
+- **The local settings page** (tray menu or `murmur --settings`) and the **personal dictionary**: vocabulary that snaps close-sounding transcripts to your spelling, plus exact heard-to-typed replacements.
+
 ## Using it
 
 | Action | What happens |
 | --- | --- |
 | Hold Right Ctrl, speak, release | Transcribes and pastes at your cursor |
+| Hold your second hotkey (if set) | Exactly the same, from whichever key or combination you bound |
 | Quick-tap Right Ctrl | Starts hands-free recording; tap again to finish |
 | Esc while recording | Cancels, nothing is pasted |
 
@@ -70,10 +109,12 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 `murmur --settings` opens the settings page, starting Murmur first if it needs to. It is also in the tray menu, and double-clicking the tray icon opens it on Windows. The page is served by Murmur itself on `127.0.0.1` only; nothing leaves your machine. Changes apply immediately, including the hotkey, and persist to `~/.murmur/config.json`.
 
 - **Hotkey**: click Change key and press the one you want. Esc stays reserved for canceling a recording.
+- **Second hotkey**: optional, and it works alongside the first, so either one starts dictation. It can be a single key or two or three held together, like `cmd+shift`. Press the combination while changing to record it. The two bindings cannot overlap: if one is contained in the other (`ctrl_r` and `ctrl_r+space`), the shorter one always fires first, so Murmur rejects that pair instead of leaving you with a hotkey that never works.
 - **Microphone**: pick a specific input, or leave it on the system default. Test mic records about a second and shows the level, so you can confirm it hears you before saving.
 - **Dictionary**: see below.
 - **Behavior**: chimes, paste versus type, trailing space, history, the recording pill, max recording length, tap-lock window, clipboard restore delay. The start-recording cue is a soft low tone; the Play button next to it previews it.
 - **Recording pill**: a small always-on-top overlay near the bottom of the screen while you talk, just a status dot and bars that move to your voice, no text (Windows and Linux; macOS shows the tray dot instead, since Tk can't share the menu-bar thread). Toggle it under Behavior.
+- **Quiet other audio**: turns the system volume down while you talk and puts it back at the exact level afterward, so dictating over a video does not fight the speaker. Off by default; macOS and Windows only. The slider sets how far down it goes (20% by default). If your volume is already lower than that, Murmur leaves it alone.
 - **Auto-format speech**: spoken times, dates, and numbers come out written. "one pm" types as `1:00 PM`, "three oh five p.m." as `3:05 PM`, "july third" as `July 3rd`, "fifty percent" as `50%`, "twenty dollars" as `$20`, "twenty five" as `25`. Deliberately conservative: anything ambiguous ("five thirty" with no am/pm) stays as spoken, and "which one am I" is never mangled. Toggle under Behavior.
 - **Model**: pick from the menu (Parakeet v2/v3, Whisper base, Canary 1B v2) or enter any onnx-asr name / Hugging Face repo id via Custom, plus precision and a language code for the models that read one. A new model downloads on first use and loads on the next dictation. See [Choosing a model](#choosing-a-model).
 - **Startup**: Open Murmur at login (Windows and macOS). See [below](#do-i-need-to-keep-the-terminal-open-start-at-login).
@@ -100,6 +141,7 @@ murmur --import-dictionary murmur-dictionary.json
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `hotkey` | `"ctrl_r"` | The push-to-talk key (pynput names) |
+| `hotkey2` | `null` | An optional second binding that also starts dictation; join keys with `+` (`"cmd+shift"`) |
 | `model` | `"nemo-parakeet-tdt-0.6b-v2"` | Any onnx-asr model name |
 | `quantization` | `"int8"` | `null` for full precision (bigger, slower on CPU) |
 | `language` | `null` | Only read by whisper/canary models; Parakeet v3 auto-detects |
@@ -113,16 +155,19 @@ murmur --import-dictionary murmur-dictionary.json
 | `history` | `true` | Log transcripts to `~/.murmur/history.jsonl` |
 | `pill` | `true` | Floating recording overlay (Windows/Linux) |
 | `formatting` | `true` | Spoken times/dates/numbers become written forms (1:00 PM, July 3rd, 50%) |
+| `duck_audio` | `false` | Turn other audio down while recording, then restore it (macOS/Windows) |
+| `duck_percent` | `20` | Output volume to drop to while recording, as a percentage |
 | `vocabulary` | `[]` | Dictionary words/phrases, spelled how they should be typed |
 | `replacements` | `[]` | Exact fixes: `{"from": "heard", "to": "typed"}` |
 | `vocab_threshold` | `0.82` | How close a word must sound to snap to vocabulary (lower catches more) |
 
-Hotkey names come from pynput: `ctrl_r`, `alt_r`, `cmd_r`, `f8`, `pause`, and friends. Pick a key that types nothing on its own; bare modifiers work best. On international Windows layouts `alt_r` is AltGr, so prefer `ctrl_r` there.
+Hotkey names come from pynput: `ctrl_r`, `alt_r`, `cmd_r`, `f8`, `pause`, and friends. Join two or three with `+` for a combination (`cmd+shift`), which is most useful as the second binding. Pick a key that types nothing on its own; bare modifiers work best. On international Windows layouts `alt_r` is AltGr, so prefer `ctrl_r` there.
 
 CLI flags override the config for one run, and a few act and exit:
 
 ```
 murmur --hotkey f8 --model nemo-parakeet-tdt-0.6b-v3 --type --no-sounds --no-tray -v
+murmur --hotkey2 cmd+shift   # a second hotkey that also starts dictation
 murmur --settings            # open the settings page
 murmur --enable-autostart    # start at login (also --disable-autostart)
 murmur --list-devices        # list input devices
@@ -182,6 +227,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 - **Clipboard contents vanished**: Murmur restores text clipboards after pasting, but images and files are lost. Set `restore_clipboard_ms` to `-1` if you would rather keep the transcript on the clipboard.
 - **It does not start at login (Windows)**: run `murmur --enable-autostart` and confirm it prints "Murmur will start at login." Startup is per-machine, so enabling it on your Mac never sets up Windows. Murmur should then appear under Task Manager > Startup Apps; if that list shows it as *Disabled*, right-click and choose Enable, since Windows keeps its own on/off flag that can override the entry. If the command reports it cannot find `murmur` on PATH, run `uv tool update-shell`, open a fresh terminal, and try again. After a `uv tool` reinstall or upgrade that moves the command, run the enable line once more to refresh the path it points at.
 - **Enabling reports that Windows removed the startup entry**: some antivirus and "startup manager" tools revert startup changes made by apps they do not recognize. On Windows, Murmur starts by placing a shortcut in your Startup folder (these tools usually leave it alone), and only falls back to a registry entry if the folder is blocked too. If it reports both were removed, allow Murmur (`murmurw.exe`) in that tool, or add the shortcut yourself: press Win+R, run `shell:startup`, and drop a shortcut to `murmurw.exe` in the folder that opens.
+- **"Murmur is already running, so this copy will not start"**: exactly what it says, and it is a guard, not an error. Only one copy runs at a time, because two would each transcribe and paste the same speech, typing everything twice. Use the copy already running (its tray or menu-bar icon, or `murmur --settings`), or quit that one first if you want a fresh start. This is the common surprise when Murmur starts at login and you also launch it in a terminal.
 - **Model download failed midway**: rerun `murmur --download`; it resumes.
 - **Wrong mic**: pick it in the settings page, or `murmur --list-devices` and set `device` to a name substring.
 - **A word keeps coming out wrong**: add it to the vocabulary (settings page), or add an exact replacement if the model mishears it the same way every time.

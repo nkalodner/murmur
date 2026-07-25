@@ -54,6 +54,7 @@ class App:
         self.settings_url: str | None = None
         self.pill = None  # recording overlay, created in run()
         self._used_pill = False  # a Tk overlay ran in a thread this session
+        self.ducker = None  # lowers other audio while recording, created on demand
 
         self._lock = threading.RLock()
         self._state = State.IDLE
@@ -69,6 +70,12 @@ class App:
 
     def _hotkey_down(self) -> bool:
         return bool(self.listener and self.listener.hotkey_down)
+
+    def _hotkey_label(self) -> str:
+        """How the hotkey reads in logs and the tray, with the second one if set."""
+        if self.cfg.hotkey2 and self.cfg.hotkey2.strip():
+            return f"{self.cfg.hotkey} or {self.cfg.hotkey2}"
+        return self.cfg.hotkey
 
     def _set_state(self, state: State) -> None:
         self._state = state
@@ -105,6 +112,24 @@ class App:
             self.pill.stop()
             self.pill = None
 
+    def _reconcile_ducker(self) -> None:
+        """Start or drop the audio ducker to match cfg. Called outside the lock."""
+        from murmur import ducking
+
+        if self.cfg.duck_audio and ducking.supported():
+            if self.ducker is None:
+                try:
+                    self.ducker = ducking.Ducker(self.cfg.duck_percent)
+                except Exception as e:
+                    log.debug("audio ducking unavailable: %s", e)
+                    self.ducker = None
+            else:
+                self.ducker.percent = self.cfg.duck_percent
+        elif self.ducker is not None:
+            # Turning it off mid-session must put the volume back.
+            self.ducker.close()
+            self.ducker = None
+
     # -- hotkey callbacks (run on the listener thread) --------------------
 
     def on_press(self) -> None:
@@ -125,7 +150,7 @@ class App:
                 if held_ms < self.cfg.tap_lock_ms:
                     self._set_state(State.LOCKED)
                     log.info(
-                        "Hands-free recording locked. Tap %s again to finish.", self.cfg.hotkey
+                        "Hands-free recording locked. Tap %s again to finish.", self._hotkey_label()
                     )
                 else:
                     self._finish_recording()
@@ -135,6 +160,8 @@ class App:
             if self._state in (State.RECORDING, State.LOCKED):
                 self._cancel_max_timer()
                 self.recorder.abort()
+                if self.ducker:
+                    self.ducker.restore()
                 self._set_state(State.IDLE)
                 self.sounds.play("cancel")
                 log.info("Recording canceled")
@@ -150,6 +177,9 @@ class App:
             return
         self._set_state(State.RECORDING)
         self.sounds.play("start")
+        # After the cue, so the confirmation chime is not the thing we duck.
+        if self.ducker:
+            self.ducker.duck()
         self._max_timer = threading.Timer(self.cfg.max_seconds, self._on_max_duration)
         self._max_timer.daemon = True
         self._max_timer.start()
@@ -170,6 +200,8 @@ class App:
     def _finish_recording(self) -> None:
         self._cancel_max_timer()
         wav, seconds = self.recorder.stop()
+        if self.ducker:
+            self.ducker.restore()
         self.sounds.play("stop")
         if seconds < 0.25:
             self._set_state(State.IDLE)
@@ -185,7 +217,7 @@ class App:
             with self._lock:
                 self._set_state(self._state)  # refresh the tray away from "loading"
             self.sounds.play("ready")
-            log.info("Ready. Hold %s and talk.", self.cfg.hotkey)
+            log.info("Ready. Hold %s and talk.", self._hotkey_label())
         except Exception as e:
             log.error("Model failed to load: %s", e)
             log.error("If the download failed, check your connection and run: murmur --download")
@@ -273,6 +305,7 @@ class App:
 
         from murmur.audio import find_input_device
         from murmur.config import Config, save, validate
+        from murmur.ducking import supported as ducking_supported
         from murmur.hotkey import parse_hotkey
 
         known = {f.name for f in dc_fields(Config)}
@@ -292,8 +325,15 @@ class App:
                 problem = check_model_name(new.model)
                 if problem:
                     raise ValueError(problem)
-            if new.hotkey != old.hotkey:
-                parse_hotkey(new.hotkey)
+            if (new.hotkey, new.hotkey2) != (old.hotkey, old.hotkey2):
+                # Reject an unknown key name now, while the old binding is
+                # still live, instead of breaking the listener on retarget.
+                from murmur.hotkey import split_binding
+
+                for spec in (new.hotkey, new.hotkey2):
+                    if spec and spec.strip():
+                        for part in split_binding(spec):
+                            parse_hotkey(part)
             device_index = self._device
             if new.device != old.device:
                 device_index = find_input_device(new.device)
@@ -318,15 +358,18 @@ class App:
                 warnings.append(
                     "the model loads on the next dictation, so that one will be slow"
                 )
-            if new.hotkey != old.hotkey and self.listener is not None:
+            if (new.hotkey, new.hotkey2) != (old.hotkey, old.hotkey2) and self.listener is not None:
                 if self._state in (State.RECORDING, State.LOCKED):
                     self._finish_recording()
                 # In place; recreating the listener here crashes on macOS
                 # (see HotkeyListener.retarget).
-                self.listener.retarget(new.hotkey)
+                self.listener.retarget(new.hotkey, new.hotkey2)
+            if new.duck_audio and not ducking_supported():
+                warnings.append("quieting other audio is only available on macOS and Windows")
             self._set_state(self._state)  # refresh the tray title + menu hint
         save(self.cfg)
         self._reconcile_pill()  # start/stop the overlay if cfg.pill changed
+        self._reconcile_ducker()  # start/stop/retune ducking if it changed
         log.info("Settings updated%s", f" ({'; '.join(warnings)})" if warnings else "")
         return warnings
 
@@ -418,13 +461,17 @@ class App:
 
         self._worker.start()
         self.listener = HotkeyListener(
-            self.cfg.hotkey, self.on_press, self.on_release, self.on_cancel
+            self.cfg.hotkey,
+            self.on_press,
+            self.on_release,
+            self.on_cancel,
+            hotkey2=self.cfg.hotkey2,
         )
         self.listener.start()
         log.info(
             "Murmur %s. Hold %s to dictate, quick-tap to go hands-free, Esc cancels.",
             __version__,
-            self.cfg.hotkey,
+            self._hotkey_label(),
         )
 
         try:
@@ -440,13 +487,14 @@ class App:
                 self.open_settings()
 
         self._reconcile_pill()
+        self._reconcile_ducker()
 
         if use_tray:
             try:
                 from murmur.tray import Tray
 
                 self.tray = Tray(
-                    lambda: f"Hold {self.cfg.hotkey} to dictate. Tap locks, Esc cancels.",
+                    lambda: f"Hold {self._hotkey_label()} to dictate. Tap locks, Esc cancels.",
                     self.shutdown,
                     on_settings=self.open_settings if self.settings_url else None,
                 )
@@ -483,6 +531,11 @@ class App:
             pass
         self.recorder.abort()
         self._jobs.put(None)
+        if self.ducker:
+            # Blocks until the volume is back: main() may os._exit() right
+            # after this, and a daemon thread would not get another turn.
+            self.ducker.close()
+            self.ducker = None
         if self.pill:
             self.pill.stop()
         if self.settings:
@@ -504,6 +557,10 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument("--hotkey", help="override the hotkey (default ctrl_r)")
+    parser.add_argument(
+        "--hotkey2",
+        help="a second hotkey that also starts dictation; may combine keys with + (e.g. cmd+shift)",
+    )
     parser.add_argument(
         "--model", help="override the ASR model (e.g. nemo-parakeet-tdt-0.6b-v3 for multilingual)"
     )
@@ -633,6 +690,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.hotkey:
         cfg.hotkey = args.hotkey
+    if args.hotkey2:
+        cfg.hotkey2 = args.hotkey2
+    if args.hotkey or args.hotkey2:
+        from murmur.config import validate_hotkeys
+
+        try:
+            validate_hotkeys(cfg)
+        except ValueError as e:
+            log.error("%s", e)
+            return 2
     if args.model:
         from murmur.models import check_model_name
 
@@ -698,16 +765,43 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         log.info("Murmur is not running yet; starting it now.")
 
+    # One copy at a time. Two running instances type every dictation twice,
+    # which is the classic "I ran murmur in another terminal" mixup.
+    from murmur.singleton import InstanceLock
+
+    lock = InstanceLock()
+    if not lock.acquire():
+        from murmur.server import find_running_instance
+
+        # The port being busy is the fast signal, but it is not proof: any
+        # other program could hold it. Ask the settings server who is there
+        # before refusing, so an unrelated squatter never locks Murmur out of
+        # starting at all.
+        url = find_running_instance()
+        if url:
+            log.error("Murmur is already running, so this copy will not start.")
+            log.error("Its settings page is %s (also in the tray menu).", url)
+            log.error("Quit that copy first if you want to restart it.")
+            return 0
+        log.warning(
+            "Port %s is in use by something else; starting anyway. If you end up "
+            "with two copies typing everything twice, quit one from the tray.",
+            lock.port,
+        )
+
     try:
         app = App(cfg)
     except LookupError as e:
         log.error("%s", e)
+        lock.close()
         return 2
     try:
         app.run(use_tray=not args.no_tray, open_settings=args.settings)
     except ValueError as e:  # bad hotkey name
         log.error("%s", e)
+        lock.close()
         return 2
+    lock.close()
     if app._used_pill:
         # tkinter ran the pill in a background thread; a normal interpreter
         # exit would then finalize Tcl from the main thread and abort with

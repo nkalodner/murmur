@@ -103,6 +103,16 @@
       <p class="hint">Hold it to dictate; a quick tap locks hands-free. While changing, press the key you want.
       Esc stays reserved for canceling a recording. Bare keys like right Ctrl, right Alt, or F8 work best;
       a letter key would still type that letter everywhere.</p>
+
+      <div class="kicker" style="letter-spacing:.12em;margin-top:20px">Second hotkey</div>
+      <p class="hint" style="margin-top:4px">Optional. Another key, or two or three held together, that also starts
+      dictation. Handy when one hand is busy: hold either one. To record a combination, press the keys together
+      while changing.</p>
+      <div class="row" style="margin-top:10px">
+        <span id="keycap2" class="keycap">none</span>
+        <button id="captureBtn2" type="button">Set second</button>
+        <button id="clearKey2" type="button" class="ghost">Clear</button>
+      </div>
     </div>
   </section>
 
@@ -168,6 +178,11 @@
         <label class="check"><input type="checkbox" id="history"><span>Keep history<span class="sub">Transcripts saved to ~/.murmur/history.jsonl</span></span></label>
         <label class="check"><input type="checkbox" id="pill"><span>Recording pill<span class="sub">Floating overlay while recording (Windows, Linux)</span></span></label>
         <label class="check"><input type="checkbox" id="formatting"><span>Auto-format speech<span class="sub">"one pm" types as 1:00 PM; dates, percents, dollars too</span></span></label>
+        <label class="check" id="duckRow"><input type="checkbox" id="duck_audio"><span>Quiet other audio<span class="sub">Turns the volume down while you talk, back up after</span></span></label>
+      </div>
+      <div class="num" id="duckLevelRow" style="display:none">
+        <span>Quiet to<span class="sub">How far down other audio goes while recording. Left is quieter.</span></span>
+        <span class="row" style="gap:8px"><input type="range" id="duck_percent" min="0" max="80" step="5"><span id="duckPercentVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">20%</span></span>
       </div>
       <div class="grid2" style="margin-top:6px">
         <div class="num"><span>Max recording<span class="sub">Seconds before a take auto-stops</span></span><input type="number" id="max_seconds" min="5" max="1800"></div>
@@ -233,7 +248,7 @@ const HEADERS = { "Content-Type": "application/json", "X-Murmur": "1" };
 let cfg = null;        // editable copy
 let devices = [];
 let dirty = false;
-let capturing = false;
+let capturing = null;   // field id being captured, or null
 
 const CODE_MAP = {
   ControlLeft: "ctrl_l", ControlRight: "ctrl_r", AltLeft: "alt_l", AltRight: "alt_r",
@@ -296,6 +311,11 @@ function renderDevices() {
     sel.appendChild(o);
     sel.value = cfg.device;
   }
+}
+
+let canDuck = false;
+function renderDuckLevel() {
+  $("duckLevelRow").style.display = canDuck && $("duck_audio").checked ? "" : "none";
 }
 
 function renderVocab() {
@@ -382,12 +402,18 @@ function renderAll(state) {
   cfg.replacements = (cfg.replacements || []).map((p) => ({ from: p.from || "", to: p.to || "" }));
   devices = state.devices || [];
   models = state.models || [];
-  $("keycap").textContent = cfg.hotkey;
+  renderHotkeys();
   renderDevices(); renderVocab(); renderPairs();
-  for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting"]) $(id).checked = !!cfg[id];
+  for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "duck_audio"]) $(id).checked = !!cfg[id];
   for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"]) $(id).value = cfg[id];
   $("threshold").value = cfg.vocab_threshold;
   $("thresholdVal").textContent = Number(cfg.vocab_threshold).toFixed(2);
+  $("duck_percent").value = cfg.duck_percent;
+  $("duckPercentVal").textContent = cfg.duck_percent + "%";
+  // Ducking only has a backend on macOS and Windows.
+  canDuck = state.platform === "darwin" || state.platform === "win32";
+  $("duckRow").style.display = canDuck ? "" : "none";
+  renderDuckLevel();
   renderModelPicker();
   $("language").value = cfg.language || "";
   $("quantization").value = cfg.quantization || "";
@@ -415,31 +441,84 @@ async function pollStatus() {
   } catch { renderOffline(); }
 }
 
-$("captureBtn").addEventListener("click", () => {
-  capturing = !capturing;
-  $("keycap").classList.toggle("listening", capturing);
-  $("keycap").textContent = capturing ? "press a key" : cfg.hotkey;
-  $("captureBtn").textContent = capturing ? "Cancel" : "Change key";
+// Hotkey capture. `capturing` names the field being set ("hotkey" or
+// "hotkey2"); keys pressed together accumulate into a chord and commit on the
+// first key going back up, the way shortcut recorders usually behave.
+const CAPTURE_FIELDS = {
+  hotkey: { cap: "keycap", btn: "captureBtn", label: "Change key" },
+  hotkey2: { cap: "keycap2", btn: "captureBtn2", label: "Set second" },
+};
+const MAX_CHORD_KEYS = 3;
+let captureKeys = [];
+
+function keyName(code) {
+  if (CODE_MAP[code]) return CODE_MAP[code];
+  if (/^F\d{1,2}$/.test(code)) return code.toLowerCase();
+  if (/^Key([A-Z])$/.test(code)) return code.slice(3).toLowerCase();
+  if (/^Digit(\d)$/.test(code)) return code.slice(5);
+  return null;
+}
+
+function renderHotkeys() {
+  $("keycap").textContent = cfg.hotkey;
+  $("keycap2").textContent = cfg.hotkey2 || "none";
+  $("clearKey2").style.display = cfg.hotkey2 ? "" : "none";
+}
+
+function stopCapture() {
+  if (!capturing) return;
+  const f = CAPTURE_FIELDS[capturing];
+  $(f.cap).classList.remove("listening");
+  $(f.btn).textContent = f.label;
+  capturing = null;
+  captureKeys = [];
+  renderHotkeys();
+}
+
+function startCapture(field) {
+  if (capturing) { stopCapture(); return; }
+  capturing = field;
+  captureKeys = [];
+  const f = CAPTURE_FIELDS[field];
+  $(f.cap).classList.add("listening");
+  $(f.cap).textContent = "press a key";
+  $(f.btn).textContent = "Cancel";
+}
+
+$("captureBtn").addEventListener("click", () => startCapture("hotkey"));
+$("captureBtn2").addEventListener("click", () => startCapture("hotkey2"));
+$("clearKey2").addEventListener("click", () => {
+  cfg.hotkey2 = null;
+  renderHotkeys();
+  setDirty(true);
 });
+
 document.addEventListener("keydown", (e) => {
   if (!capturing) return;
   e.preventDefault();
-  if (e.code === "Escape") {
-    capturing = false;
-  } else {
-    let name = null;
-    if (CODE_MAP[e.code]) name = CODE_MAP[e.code];
-    else if (/^F\d{1,2}$/.test(e.code)) name = e.code.toLowerCase();
-    else if (/^Key([A-Z])$/.test(e.code)) name = e.code.slice(3).toLowerCase();
-    else if (/^Digit(\d)$/.test(e.code)) name = e.code.slice(5);
-    if (!name) { msg("That key can't be captured; try another.", "err"); return; }
-    cfg.hotkey = name;
-    capturing = false;
-    setDirty(true);
+  if (e.code === "Escape") { stopCapture(); return; }
+  const name = keyName(e.code);
+  if (!name) { msg("That key can't be captured; try another.", "err"); return; }
+  if (!captureKeys.includes(name) && captureKeys.length < MAX_CHORD_KEYS) captureKeys.push(name);
+  $(CAPTURE_FIELDS[capturing].cap).textContent = captureKeys.join("+");
+});
+
+document.addEventListener("keyup", (e) => {
+  if (!capturing || !captureKeys.length) return;
+  e.preventDefault();
+  const field = capturing;
+  const spec = captureKeys.join("+");
+  // Let the app reject an unusable pair (one binding inside the other); this
+  // just catches the obvious duplicate before a round trip.
+  const other = field === "hotkey" ? cfg.hotkey2 : cfg.hotkey;
+  if (other && other === spec) {
+    msg("That is already the other hotkey. Pick different keys.", "err");
+    stopCapture();
+    return;
   }
-  $("keycap").classList.remove("listening");
-  $("keycap").textContent = cfg.hotkey;
-  $("captureBtn").textContent = "Change key";
+  cfg[field] = spec;
+  stopCapture();
+  setDirty(true);
 });
 
 $("device").addEventListener("change", () => { cfg.device = $("device").value || null; setDirty(true); });
@@ -468,8 +547,14 @@ $("pairAdd").addEventListener("click", () => {
   if (rows.length) rows[rows.length - 2].focus();
 });
 
-for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting"])
+for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "duck_audio"])
   $(id).addEventListener("change", () => { cfg[id] = $(id).checked; setDirty(true); });
+$("duck_audio").addEventListener("change", renderDuckLevel);
+$("duck_percent").addEventListener("input", () => {
+  cfg.duck_percent = parseInt($("duck_percent").value, 10);
+  $("duckPercentVal").textContent = cfg.duck_percent + "%";
+  setDirty(true);
+});
 for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"])
   $(id).addEventListener("input", () => { cfg[id] = parseInt($(id).value, 10); setDirty(true); });
 $("threshold").addEventListener("input", () => {
