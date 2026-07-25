@@ -4,6 +4,7 @@ import json
 import pytest
 
 from murmur.config import Config, load, save, validate
+from murmur.hotkey import split_binding
 
 
 def test_load_creates_default_file(tmp_path):
@@ -54,3 +55,71 @@ def test_validate_accepts_defaults():
 def test_validate_rejects_bad_values(cfg):
     with pytest.raises(ValueError):
         validate(cfg)
+
+
+# ── hotkeys: split_binding + the two-binding rules ─────────────────────
+# Pure string work (no pynput), so these run even on a headless box.
+
+
+def test_split_binding_single_and_chord():
+    assert split_binding("ctrl_r") == ["ctrl_r"]
+    assert split_binding("cmd+shift") == ["cmd", "shift"]
+    assert split_binding("  CTRL_R + Space ") == ["ctrl_r", "space"]
+
+
+def test_split_binding_keeps_the_plus_key_itself():
+    assert split_binding("+") == ["+"]
+
+
+@pytest.mark.parametrize("spec", ["", "   ", "ctrl_r+ctrl_r", "a+b+c+d"])
+def test_split_binding_rejects(spec):
+    with pytest.raises(ValueError):
+        split_binding(spec)
+
+
+def test_validate_accepts_a_second_hotkey():
+    validate(Config(hotkey="ctrl_r", hotkey2="cmd+shift"))
+    validate(Config(hotkey="ctrl_r", hotkey2=None))
+    validate(Config(hotkey="ctrl_r", hotkey2=""))  # blank means "none"
+
+
+@pytest.mark.parametrize("cfg", [
+    Config(hotkey="ctrl_r", hotkey2="ctrl_r"),          # identical
+    Config(hotkey="ctrl_r", hotkey2="ctrl_r+space"),    # primary fires first
+    Config(hotkey="ctrl_r+space", hotkey2="ctrl_r"),    # second fires first
+    Config(hotkey="ctrl_r", hotkey2=5),                 # not a string
+])
+def test_validate_rejects_unreachable_hotkey_pairs(cfg):
+    with pytest.raises(ValueError):
+        validate(cfg)
+
+
+def test_overlapping_hotkey_error_names_both_keys():
+    with pytest.raises(ValueError, match="overlaps"):
+        validate(Config(hotkey="ctrl_r", hotkey2="ctrl_r+space"))
+
+
+# ── ducking ────────────────────────────────────────────────────────────
+
+
+def test_validate_accepts_ducking_settings():
+    validate(Config(duck_audio=True, duck_percent=0))
+    validate(Config(duck_audio=True, duck_percent=100))
+
+
+@pytest.mark.parametrize("cfg", [
+    Config(duck_percent=-1),
+    Config(duck_percent=101),
+    Config(duck_percent=True),   # a bool is not a level
+    Config(duck_audio="yes"),
+])
+def test_validate_rejects_bad_ducking(cfg):
+    with pytest.raises(ValueError):
+        validate(cfg)
+
+
+def test_new_keys_round_trip(tmp_path):
+    path = tmp_path / "config.json"
+    cfg = Config(hotkey="f8", hotkey2="cmd+shift", duck_audio=True, duck_percent=35)
+    save(cfg, path)
+    assert load(path) == cfg

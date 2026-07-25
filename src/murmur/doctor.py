@@ -17,7 +17,8 @@ def _line(ok: bool | None, label: str, detail: str = "") -> None:
 def run(cfg: Config) -> int:
     print(f"murmur {__version__} on {platform.platform()} / Python {sys.version.split()[0]}")
     print(f"  config: {CONFIG_PATH}")
-    print(f"  model: {cfg.model} ({cfg.quantization or 'fp32'})  hotkey: {cfg.hotkey}")
+    hotkeys = cfg.hotkey + (f" or {cfg.hotkey2}" if cfg.hotkey2 else "")
+    print(f"  model: {cfg.model} ({cfg.quantization or 'fp32'})  hotkey: {hotkeys}")
     print(
         f"  dictionary: {len(cfg.vocabulary)} words, {len(cfg.replacements)} replacements"
         "  (move it with --export-dictionary / --import-dictionary)"
@@ -87,13 +88,24 @@ def run(cfg: Config) -> int:
     except Exception as e:
         _line(False, "clipboard", str(e))
 
-    try:
-        from murmur.hotkey import parse_hotkey
+    # Both bindings, and every key of a chord.
+    for label, spec in (("hotkey", cfg.hotkey), ("second hotkey", cfg.hotkey2)):
+        if not spec or not str(spec).strip():
+            continue
+        try:
+            from murmur.hotkey import parse_hotkey, split_binding
 
-        parse_hotkey(cfg.hotkey)
-        _line(True, f"hotkey {cfg.hotkey!r} parses")
-    except Exception as e:
-        _line(False, f"hotkey {cfg.hotkey!r}", str(e))
+            for part in split_binding(spec):
+                parse_hotkey(part)
+            _line(True, f"{label} {spec!r} parses")
+        except Exception as e:
+            _line(False, f"{label} {spec!r}", str(e))
+    try:
+        from murmur.config import validate_hotkeys
+
+        validate_hotkeys(cfg)
+    except ValueError as e:
+        _line(False, "hotkey pair", str(e))
 
     from murmur import autostart
 

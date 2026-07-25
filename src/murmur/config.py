@@ -17,6 +17,7 @@ HISTORY_PATH = CONFIG_DIR / "history.jsonl"
 @dataclass
 class Config:
     hotkey: str = "ctrl_r"  # hold to talk; a quick tap locks hands-free
+    hotkey2: str | None = None  # optional second binding; may be a chord ("cmd+shift")
     model: str = "nemo-parakeet-tdt-0.6b-v2"  # v3 is the multilingual variant
     quantization: str | None = "int8"  # null = full precision (bigger download, slower on CPU)
     language: str | None = None  # only read by whisper/canary models; parakeet v3 auto-detects
@@ -30,6 +31,8 @@ class Config:
     history: bool = True  # append transcripts to ~/.murmur/history.jsonl
     pill: bool = True  # show the floating recording pill (Windows/Linux)
     formatting: bool = True  # spoken times/dates/numbers -> written forms (1:00 PM)
+    duck_audio: bool = False  # turn other audio down while recording (macOS/Windows)
+    duck_percent: int = 20  # output volume to duck to, as a percentage
     # Personal dictionary: words/phrases spelled the way you want them typed
     # (fuzzy-matched against each transcript), plus exact heard->typed pairs.
     vocabulary: list[str] = field(default_factory=list)
@@ -152,19 +155,46 @@ def _int_in(name: str, value, lo: int, hi: int) -> None:
         raise ValueError(f"{name} must be a whole number between {lo} and {hi}")
 
 
-def validate(cfg: Config) -> None:
-    """Raise ValueError on values the app can't run with (used by the settings server)."""
+def validate_hotkeys(cfg: Config) -> None:
+    """Shape-check both bindings and reject a pair that can never both fire.
+
+    Pure string work (no pynput), so it runs anywhere. Whether a key *name*
+    is real is settled separately by hotkey.parse_hotkey.
+    """
+    from murmur.hotkey import split_binding
+
     if not isinstance(cfg.hotkey, str) or not cfg.hotkey.strip():
         raise ValueError("hotkey must be a non-empty string")
+    primary = set(split_binding(cfg.hotkey))  # raises on >3 keys or a repeat
+    if cfg.hotkey2 is None:
+        return
+    if not isinstance(cfg.hotkey2, str):
+        raise ValueError("hotkey2 must be a string or null")
+    if not cfg.hotkey2.strip():
+        return  # blank means "no second hotkey"
+    second = set(split_binding(cfg.hotkey2))
+    # A binding whose keys are all contained in the other one can never fire:
+    # the shorter one completes first and takes the recording.
+    if primary <= second or second <= primary:
+        raise ValueError(
+            f"the second hotkey ({cfg.hotkey2}) overlaps the first ({cfg.hotkey}), "
+            "so only one of them could ever fire. Pick keys that do not include each other."
+        )
+
+
+def validate(cfg: Config) -> None:
+    """Raise ValueError on values the app can't run with (used by the settings server)."""
+    validate_hotkeys(cfg)
     if not isinstance(cfg.model, str) or not cfg.model.strip():
         raise ValueError("model must be a non-empty string")
     for name in ("quantization", "language", "device"):
         value = getattr(cfg, name)
         if value is not None and not isinstance(value, str):
             raise ValueError(f"{name} must be a string or null")
-    for name in ("sounds", "paste", "trailing_space", "history", "pill", "formatting"):
+    for name in ("sounds", "paste", "trailing_space", "history", "pill", "formatting", "duck_audio"):
         if not isinstance(getattr(cfg, name), bool):
             raise ValueError(f"{name} must be true or false")
+    _int_in("duck_percent", cfg.duck_percent, 0, 100)
     _int_in("tap_lock_ms", cfg.tap_lock_ms, 50, 2000)
     _int_in("max_seconds", cfg.max_seconds, 5, 1800)
     _int_in("restore_clipboard_ms", cfg.restore_clipboard_ms, -1, 60000)
