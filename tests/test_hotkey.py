@@ -190,3 +190,45 @@ def test_retarget_can_drop_the_second_binding():
     assert len(ear._bindings) == 1
     ear._handle_press(key("f8"))
     assert spy.presses == 0
+
+
+# ── either slot switched off ────────────────────────────────────────────
+
+
+def test_listener_runs_on_the_second_binding_alone():
+    """Primary off, chord only: the single key must be truly deaf."""
+    spy = Spy()
+    ear = spy.listener(None, "cmd+shift")
+    assert len(ear._bindings) == 1
+    ear._handle_press(key("ctrl_r"))
+    assert spy.presses == 0  # the old default key does nothing now
+    ear._handle_press(key("cmd"))
+    ear._handle_press(key("shift"))
+    assert spy.presses == 1
+    ear._handle_release(key("shift"))
+    assert spy.releases == 1
+
+
+def test_blank_primary_is_treated_as_off():
+    spy = Spy()
+    ear = spy.listener("", "f8")
+    assert len(ear._bindings) == 1
+    ear._handle_press(key("f8"))
+    assert spy.presses == 1
+
+
+def test_listener_refuses_to_run_deaf():
+    spy = Spy()
+    with pytest.raises(ValueError):
+        spy.listener(None, None)
+
+
+def test_retarget_can_switch_the_primary_off():
+    spy = Spy()
+    ear = spy.listener("ctrl_r", "f8")
+    ear.retarget(None, "f8")
+    assert len(ear._bindings) == 1
+    ear._handle_press(key("ctrl_r"))
+    assert spy.presses == 0
+    ear._handle_press(key("f8"))
+    assert spy.presses == 1

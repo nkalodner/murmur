@@ -171,11 +171,19 @@ def process(
     vocabulary: list[str] | None = None,
     vocab_threshold: float = DEFAULT_VOCAB_THRESHOLD,
     formatting: bool = True,
+    remove_fillers: bool = True,
+    filler_words=None,
     trailing_space: bool = True,
 ) -> str:
-    """Full pipeline: replacements, vocabulary, spoken-form formatting, cleanup."""
+    """Full pipeline: replacements, vocabulary, fillers, formatting, cleanup."""
     text = apply_replacements(text, replacements or [])
     text = apply_vocabulary(text, vocabulary or [], vocab_threshold)
+    if remove_fillers:
+        # Before formatting, so "um, one pm" still becomes "1:00 PM", and
+        # after the dictionary, so an explicit replacement can still win.
+        from murmur.fillers import DEFAULT_FILLERS, remove_fillers as strip_fillers
+
+        text = strip_fillers(text, filler_words or DEFAULT_FILLERS)
     if formatting:
         from murmur.formatting import format_speech
 

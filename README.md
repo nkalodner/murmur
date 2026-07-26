@@ -6,7 +6,7 @@ I develop Murmur inside my personal site's monorepo, and every change is auto-pu
 
 ## How it works
 
-- A small tray app watches a global hotkey (Right Ctrl by default), plus an optional second one you can set to a key combination.
+- A small tray app watches up to two global hotkeys (Right Ctrl by default), either of which can be a key combination, and either of which can be switched off.
 - Only one copy runs at a time. Starting a second one exits with a note instead, since two would type every dictation twice.
 - Hold the key and speak. Release, and Murmur transcribes on the machine and pastes the text into whatever app has focus.
 - Quick-tap the key instead to record hands-free, then tap again to finish. Esc cancels a recording.
@@ -54,14 +54,25 @@ Notes:
 
 `murmur --doctor` checks mic, model cache, permissions, and clipboard in one pass.
 
+### What Murmur sends
+
+Nothing you say, ever. Transcription is entirely local, and there is no telemetry or analytics of any kind.
+
+The one exception is the update check: once a day Murmur fetches a version number from this repo so it can tell you when a newer release exists. It is a plain download that sends no transcript, no settings, and nothing identifying you. Turn it off with **Check for updates** under Behavior, or `"update_check": false` in the config, and Murmur makes no network requests at all after the model has downloaded.
+
 ## What's new
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
+### 0.8.0
+
+- **Filler words get dropped.** "um" and "uh" no longer make it into what gets typed. Deliberately narrow: only sounds that are never real English words, so "umbrella", "uh-huh", and "the sum of" are all safe. On by default, under Behavior; add your own words to `filler_words` in `~/.murmur/config.json` if you want a heavier hand.
+- **Murmur tells you when there is a new version.** It asks GitHub once a day and shows a banner in the settings page when a newer version exists, with the update command right there. **This is the only network request Murmur makes.** It sends no transcript, no config, and nothing that identifies you, and one toggle under Behavior turns it off. Your speech still never leaves the machine. Also `murmur --check-update`.
+
 ### 0.7.0
 
 - **Only one copy runs at a time.** Starting Murmur while it is already running now exits with a note pointing at the copy you have. Two copies each transcribed and pasted the same speech, so everything got typed twice. Most common when Murmur starts at login and you also launch it in a terminal.
-- **A second hotkey, and hotkeys can be combinations.** Set an optional second binding that also starts dictation, so either key works. It can be one key or two or three held together, like `cmd+shift`. The original single key stays the default and keeps working. See [Settings](#settings).
+- **A second hotkey, and hotkeys can be combinations.** Two independent bindings, either of which starts dictation. Each can be one key or two or three held together, like `cmd+shift`. **Either can also be switched off**, so if you want only a combination and no bare key, turn the first one off. One has to stay on. See [Settings](#settings).
 - **Quiet other audio while you talk.** Optional: the system volume drops while you are recording and returns to the exact level afterward, so dictating over a video does not fight the speaker. Off by default, under Behavior. macOS and Windows.
 
 ### 0.6.0
@@ -108,13 +119,16 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 
 `murmur --settings` opens the settings page, starting Murmur first if it needs to. It is also in the tray menu, and double-clicking the tray icon opens it on Windows. The page is served by Murmur itself on `127.0.0.1` only; nothing leaves your machine. Changes apply immediately, including the hotkey, and persist to `~/.murmur/config.json`.
 
-- **Hotkey**: click Change key and press the one you want. Esc stays reserved for canceling a recording.
-- **Second hotkey**: optional, and it works alongside the first, so either one starts dictation. It can be a single key or two or three held together, like `cmd+shift`. Press the combination while changing to record it. The two bindings cannot overlap: if one is contained in the other (`ctrl_r` and `ctrl_r+space`), the shorter one always fires first, so Murmur rejects that pair instead of leaving you with a hotkey that never works.
+- **Hotkeys**: two independent bindings, and either one starts dictation. Each can be a single key or two or three held together (`cmd+shift`); press the combination while changing to record it. Esc stays reserved for canceling a recording.
+  - **Either one can be switched off**, so long as one is left. Want only a two-key combination and no bare key? Switch the first one off. Murmur refuses to leave you with both off, since there would be no way to dictate.
+  - The two cannot overlap: if one is contained in the other (`ctrl_r` and `ctrl_r+space`), the shorter one always fires first, so Murmur rejects that pair instead of leaving you with a hotkey that never works.
 - **Microphone**: pick a specific input, or leave it on the system default. Test mic records about a second and shows the level, so you can confirm it hears you before saving.
 - **Dictionary**: see below.
 - **Behavior**: chimes, paste versus type, trailing space, history, the recording pill, max recording length, tap-lock window, clipboard restore delay. The start-recording cue is a soft low tone; the Play button next to it previews it.
 - **Recording pill**: a small always-on-top overlay near the bottom of the screen while you talk, just a status dot and bars that move to your voice, no text (Windows and Linux; macOS shows the tray dot instead, since Tk can't share the menu-bar thread). Toggle it under Behavior.
 - **Quiet other audio**: turns the system volume down while you talk and puts it back at the exact level afterward, so dictating over a video does not fight the speaker. Off by default; macOS and Windows only. The slider sets how far down it goes (20% by default). If your volume is already lower than that, Murmur leaves it alone.
+- **Drop filler words**: "um" and "uh" are removed before the text is typed. Only sounds that are never real words are on the list, so ordinary speech is untouched; `filler_words` in the config file takes additions if you want more removed.
+- **Check for updates**: asks GitHub once a day whether a newer Murmur exists and shows a banner when there is one. The only network request Murmur makes after setup, and it sends nothing about you. Turn it off here if you would rather it never reached out.
 - **Auto-format speech**: spoken times, dates, and numbers come out written. "one pm" types as `1:00 PM`, "three oh five p.m." as `3:05 PM`, "july third" as `July 3rd`, "fifty percent" as `50%`, "twenty dollars" as `$20`, "twenty five" as `25`. Deliberately conservative: anything ambiguous ("five thirty" with no am/pm) stays as spoken, and "which one am I" is never mangled. Toggle under Behavior.
 - **Model**: pick from the menu (Parakeet v2/v3, Whisper base, Canary 1B v2) or enter any onnx-asr name / Hugging Face repo id via Custom, plus precision and a language code for the models that read one. A new model downloads on first use and loads on the next dictation. See [Choosing a model](#choosing-a-model).
 - **Startup**: Open Murmur at login (Windows and macOS). See [below](#do-i-need-to-keep-the-terminal-open-start-at-login).
@@ -140,8 +154,8 @@ murmur --import-dictionary murmur-dictionary.json
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `hotkey` | `"ctrl_r"` | The push-to-talk key (pynput names) |
-| `hotkey2` | `null` | An optional second binding that also starts dictation; join keys with `+` (`"cmd+shift"`) |
+| `hotkey` | `"ctrl_r"` | The push-to-talk key (pynput names); `null` switches it off |
+| `hotkey2` | `null` | A second binding that also starts dictation; join keys with `+` (`"cmd+shift"`) |
 | `model` | `"nemo-parakeet-tdt-0.6b-v2"` | Any onnx-asr model name |
 | `quantization` | `"int8"` | `null` for full precision (bigger, slower on CPU) |
 | `language` | `null` | Only read by whisper/canary models; Parakeet v3 auto-detects |
@@ -155,13 +169,16 @@ murmur --import-dictionary murmur-dictionary.json
 | `history` | `true` | Log transcripts to `~/.murmur/history.jsonl` |
 | `pill` | `true` | Floating recording overlay (Windows/Linux) |
 | `formatting` | `true` | Spoken times/dates/numbers become written forms (1:00 PM, July 3rd, 50%) |
+| `remove_fillers` | `true` | Drop filler words from transcripts before they are typed |
+| `filler_words` | `["um","uh","erm","uhm"]` | The words removed. Add your own for a more aggressive pass |
+| `update_check` | `true` | Ask GitHub once a day whether a newer Murmur exists |
 | `duck_audio` | `false` | Turn other audio down while recording, then restore it (macOS/Windows) |
 | `duck_percent` | `20` | Output volume to drop to while recording, as a percentage |
 | `vocabulary` | `[]` | Dictionary words/phrases, spelled how they should be typed |
 | `replacements` | `[]` | Exact fixes: `{"from": "heard", "to": "typed"}` |
 | `vocab_threshold` | `0.82` | How close a word must sound to snap to vocabulary (lower catches more) |
 
-Hotkey names come from pynput: `ctrl_r`, `alt_r`, `cmd_r`, `f8`, `pause`, and friends. Join two or three with `+` for a combination (`cmd+shift`), which is most useful as the second binding. Pick a key that types nothing on its own; bare modifiers work best. On international Windows layouts `alt_r` is AltGr, so prefer `ctrl_r` there.
+Hotkey names come from pynput: `ctrl_r`, `alt_r`, `cmd_r`, `f8`, `pause`, and friends. Join two or three with `+` for a combination (`cmd+shift`). Set either binding to `null` to switch it off; at least one has to stay on. Pick a key that types nothing on its own; bare modifiers work best. On international Windows layouts `alt_r` is AltGr, so prefer `ctrl_r` there.
 
 CLI flags override the config for one run, and a few act and exit:
 
@@ -172,6 +189,7 @@ murmur --settings            # open the settings page
 murmur --enable-autostart    # start at login (also --disable-autostart)
 murmur --list-devices        # list input devices
 murmur --doctor              # check mic, model, permissions, clipboard
+murmur --check-update        # ask GitHub whether a newer version exists
 murmur --export-dictionary   # write your dictionary to a file for another device
 murmur --import-dictionary murmur-dictionary.json
 ```

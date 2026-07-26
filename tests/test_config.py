@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from murmur.config import Config, load, save, validate
+from murmur.config import Config, hotkey_specs, load, save, validate
 from murmur.hotkey import split_binding
 
 
@@ -80,7 +80,31 @@ def test_split_binding_rejects(spec):
 def test_validate_accepts_a_second_hotkey():
     validate(Config(hotkey="ctrl_r", hotkey2="cmd+shift"))
     validate(Config(hotkey="ctrl_r", hotkey2=None))
-    validate(Config(hotkey="ctrl_r", hotkey2=""))  # blank means "none"
+    validate(Config(hotkey="ctrl_r", hotkey2=""))  # blank means "off"
+
+
+def test_either_slot_can_be_switched_off():
+    """Only the chord, no single key: the whole point of making both optional."""
+    validate(Config(hotkey=None, hotkey2="cmd+shift"))
+    validate(Config(hotkey="", hotkey2="cmd+shift"))
+    validate(Config(hotkey="ctrl_r", hotkey2=None))
+
+
+@pytest.mark.parametrize("cfg", [
+    Config(hotkey=None, hotkey2=None),
+    Config(hotkey="", hotkey2=""),
+    Config(hotkey="   ", hotkey2=None),
+])
+def test_validate_rejects_both_hotkeys_off(cfg):
+    with pytest.raises(ValueError, match="at least one hotkey"):
+        validate(cfg)
+
+
+def test_hotkey_specs_lists_only_the_live_ones():
+    assert hotkey_specs(Config(hotkey="ctrl_r", hotkey2="cmd+shift")) == ["ctrl_r", "cmd+shift"]
+    assert hotkey_specs(Config(hotkey=None, hotkey2="cmd+shift")) == ["cmd+shift"]
+    assert hotkey_specs(Config(hotkey="ctrl_r", hotkey2="")) == ["ctrl_r"]
+    assert hotkey_specs(Config(hotkey=None, hotkey2=None)) == []
 
 
 @pytest.mark.parametrize("cfg", [
@@ -95,7 +119,7 @@ def test_validate_rejects_unreachable_hotkey_pairs(cfg):
 
 
 def test_overlapping_hotkey_error_names_both_keys():
-    with pytest.raises(ValueError, match="overlaps"):
+    with pytest.raises(ValueError, match=r"ctrl_r and ctrl_r\+space.*overlap"):
         validate(Config(hotkey="ctrl_r", hotkey2="ctrl_r+space"))
 
 
@@ -121,5 +145,12 @@ def test_validate_rejects_bad_ducking(cfg):
 def test_new_keys_round_trip(tmp_path):
     path = tmp_path / "config.json"
     cfg = Config(hotkey="f8", hotkey2="cmd+shift", duck_audio=True, duck_percent=35)
+    save(cfg, path)
+    assert load(path) == cfg
+
+
+def test_hotkey_off_round_trips(tmp_path):
+    path = tmp_path / "config.json"
+    cfg = Config(hotkey=None, hotkey2="cmd+shift")
     save(cfg, path)
     assert load(path) == cfg
