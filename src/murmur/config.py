@@ -7,6 +7,8 @@ import logging
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
+from murmur.fillers import DEFAULT_FILLERS
+
 log = logging.getLogger("murmur")
 
 CONFIG_DIR = Path.home() / ".murmur"
@@ -16,8 +18,10 @@ HISTORY_PATH = CONFIG_DIR / "history.jsonl"
 
 @dataclass
 class Config:
-    hotkey: str = "ctrl_r"  # hold to talk; a quick tap locks hands-free
-    hotkey2: str | None = None  # optional second binding; may be a chord ("cmd+shift")
+    # Two independent bindings, either of which can be turned off (null or
+    # blank) as long as one survives. Either may be a chord ("cmd+shift").
+    hotkey: str | None = "ctrl_r"  # hold to talk; a quick tap locks hands-free
+    hotkey2: str | None = None
     model: str = "nemo-parakeet-tdt-0.6b-v2"  # v3 is the multilingual variant
     quantization: str | None = "int8"  # null = full precision (bigger download, slower on CPU)
     language: str | None = None  # only read by whisper/canary models; parakeet v3 auto-detects
@@ -33,6 +37,11 @@ class Config:
     formatting: bool = True  # spoken times/dates/numbers -> written forms (1:00 PM)
     duck_audio: bool = False  # turn other audio down while recording (macOS/Windows)
     duck_percent: int = 20  # output volume to duck to, as a percentage
+    remove_fillers: bool = True  # drop "um"/"uh" from transcripts before pasting
+    # Only sounds that are never real words. Add your own here if you want a
+    # more aggressive pass; the settings page deliberately keeps just the toggle.
+    filler_words: list[str] = field(default_factory=lambda: list(DEFAULT_FILLERS))
+    update_check: bool = True  # ask GitHub once a day whether a newer Murmur exists
     # Personal dictionary: words/phrases spelled the way you want them typed
     # (fuzzy-matched against each transcript), plus exact heard->typed pairs.
     vocabulary: list[str] = field(default_factory=list)
@@ -155,30 +164,42 @@ def _int_in(name: str, value, lo: int, hi: int) -> None:
         raise ValueError(f"{name} must be a whole number between {lo} and {hi}")
 
 
-def validate_hotkeys(cfg: Config) -> None:
-    """Shape-check both bindings and reject a pair that can never both fire.
+def active_hotkey(spec) -> str | None:
+    """The binding's spec, or None when it is switched off (null or blank)."""
+    if spec is None:
+        return None
+    if not isinstance(spec, str):
+        raise ValueError("hotkey and hotkey2 must be a string or null")
+    return spec.strip() or None
 
-    Pure string work (no pynput), so it runs anywhere. Whether a key *name*
-    is real is settled separately by hotkey.parse_hotkey.
+
+def hotkey_specs(cfg: Config) -> list[str]:
+    """Every binding that is currently switched on, in order."""
+    return [s for s in (active_hotkey(cfg.hotkey), active_hotkey(cfg.hotkey2)) if s]
+
+
+def validate_hotkeys(cfg: Config) -> None:
+    """Shape-check the bindings and reject a pair that can never both fire.
+
+    Either binding may be switched off, so long as one is left. Pure string
+    work (no pynput), so it runs anywhere. Whether a key *name* is real is
+    settled separately by hotkey.parse_hotkey.
     """
     from murmur.hotkey import split_binding
 
-    if not isinstance(cfg.hotkey, str) or not cfg.hotkey.strip():
-        raise ValueError("hotkey must be a non-empty string")
-    primary = set(split_binding(cfg.hotkey))  # raises on >3 keys or a repeat
-    if cfg.hotkey2 is None:
-        return
-    if not isinstance(cfg.hotkey2, str):
-        raise ValueError("hotkey2 must be a string or null")
-    if not cfg.hotkey2.strip():
-        return  # blank means "no second hotkey"
-    second = set(split_binding(cfg.hotkey2))
+    specs = hotkey_specs(cfg)
+    if not specs:
+        raise ValueError(
+            "set at least one hotkey; with both switched off there would be "
+            "no way to start dictation"
+        )
+    keysets = [set(split_binding(s)) for s in specs]  # raises on >3 keys or a repeat
     # A binding whose keys are all contained in the other one can never fire:
     # the shorter one completes first and takes the recording.
-    if primary <= second or second <= primary:
+    if len(keysets) == 2 and (keysets[0] <= keysets[1] or keysets[1] <= keysets[0]):
         raise ValueError(
-            f"the second hotkey ({cfg.hotkey2}) overlaps the first ({cfg.hotkey}), "
-            "so only one of them could ever fire. Pick keys that do not include each other."
+            f"the two hotkeys ({specs[0]} and {specs[1]}) overlap, so only one of them "
+            "could ever fire. Pick keys that do not include each other."
         )
 
 
@@ -191,7 +212,8 @@ def validate(cfg: Config) -> None:
         value = getattr(cfg, name)
         if value is not None and not isinstance(value, str):
             raise ValueError(f"{name} must be a string or null")
-    for name in ("sounds", "paste", "trailing_space", "history", "pill", "formatting", "duck_audio"):
+    for name in ("sounds", "paste", "trailing_space", "history", "pill", "formatting",
+                 "duck_audio", "remove_fillers", "update_check"):
         if not isinstance(getattr(cfg, name), bool):
             raise ValueError(f"{name} must be true or false")
     _int_in("duck_percent", cfg.duck_percent, 0, 100)
@@ -204,6 +226,10 @@ def validate(cfg: Config) -> None:
         raise ValueError("vocab_threshold must be between 0.5 and 1")
     if not isinstance(cfg.vocabulary, list) or not all(isinstance(v, str) for v in cfg.vocabulary):
         raise ValueError("vocabulary must be a list of strings")
+    if not isinstance(cfg.filler_words, list) or not all(
+        isinstance(v, str) for v in cfg.filler_words
+    ):
+        raise ValueError("filler_words must be a list of strings")
     if not isinstance(cfg.replacements, list) or not all(
         isinstance(p, dict)
         and isinstance(p.get("from", ""), str)

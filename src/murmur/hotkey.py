@@ -114,7 +114,7 @@ class HotkeyListener:
 
     def __init__(
         self,
-        hotkey: str,
+        hotkey: str | None,
         on_press: Callable[[], None],
         on_release: Callable[[], None],
         on_cancel: Callable[[], None],
@@ -136,10 +136,13 @@ class HotkeyListener:
         )
 
     @staticmethod
-    def _build(hotkey: str, hotkey2: str | None) -> list[Binding]:
-        bindings = [Binding(hotkey)]
-        if hotkey2 and hotkey2.strip():
-            bindings.append(Binding(hotkey2))
+    def _build(hotkey: str | None, hotkey2: str | None) -> list[Binding]:
+        """Bindings for whichever slots are switched on. Either may be off."""
+        bindings = [Binding(s) for s in (hotkey, hotkey2) if s and s.strip()]
+        if not bindings:
+            # config.validate_hotkeys says this in friendlier words first; this
+            # is the backstop so a listener is never silently deaf.
+            raise ValueError("No hotkey is set, so there is nothing to listen for")
         return bindings
 
     @property
@@ -160,7 +163,7 @@ class HotkeyListener:
         self._active_listener = False
         self._listener.stop()
 
-    def retarget(self, hotkey: str, hotkey2: str | None = None) -> None:
+    def retarget(self, hotkey: str | None, hotkey2: str | None = None) -> None:
         """Watch different keys on the live listener.
 
         The pynput listener must never be stopped and recreated for a hotkey

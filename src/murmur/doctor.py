@@ -17,7 +17,9 @@ def _line(ok: bool | None, label: str, detail: str = "") -> None:
 def run(cfg: Config) -> int:
     print(f"murmur {__version__} on {platform.platform()} / Python {sys.version.split()[0]}")
     print(f"  config: {CONFIG_PATH}")
-    hotkeys = cfg.hotkey + (f" or {cfg.hotkey2}" if cfg.hotkey2 else "")
+    from murmur.config import hotkey_specs
+
+    hotkeys = " or ".join(hotkey_specs(cfg)) or "none set"
     print(f"  model: {cfg.model} ({cfg.quantization or 'fp32'})  hotkey: {hotkeys}")
     print(
         f"  dictionary: {len(cfg.vocabulary)} words, {len(cfg.replacements)} replacements"
@@ -88,9 +90,10 @@ def run(cfg: Config) -> int:
     except Exception as e:
         _line(False, "clipboard", str(e))
 
-    # Both bindings, and every key of a chord.
+    # Every binding that is switched on, and every key of a chord.
     for label, spec in (("hotkey", cfg.hotkey), ("second hotkey", cfg.hotkey2)):
         if not spec or not str(spec).strip():
+            _line(None, label, "off")
             continue
         try:
             from murmur.hotkey import parse_hotkey, split_binding
@@ -106,6 +109,19 @@ def run(cfg: Config) -> int:
         validate_hotkeys(cfg)
     except ValueError as e:
         _line(False, "hotkey pair", str(e))
+
+    # Cached only: --doctor should not hang on a network call.
+    from murmur import updates
+
+    info = updates.status()
+    if not cfg.update_check:
+        _line(None, "update check", "off")
+    elif info["available"]:
+        _line(False, "update", f"{info['latest']} is available (you have {info['current']})")
+    elif info["latest"]:
+        _line(True, "update", f"{info['current']} is current")
+    else:
+        _line(None, "update", "not checked yet")
 
     from murmur import autostart
 

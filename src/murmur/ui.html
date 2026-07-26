@@ -76,6 +76,10 @@
   .savebar .inner{max-width:720px;margin:0 auto;padding:12px 20px;display:flex;align-items:center;gap:14px;justify-content:flex-end}
   .savemsg{font-size:13px;color:var(--muted);margin-right:auto}
   .savemsg.err{color:var(--danger)} .savemsg.ok{color:var(--accent-deep)}
+  .update{display:none;margin-top:14px;border:1px solid var(--accent);
+    background:color-mix(in srgb,var(--accent) 12%,var(--card));padding:12px 14px;font-size:14px;color:var(--fg)}
+  .update code{font-family:var(--mono);font-size:12.5px;background:var(--field);padding:2px 5px;border-radius:2px;
+    display:inline-block;margin-top:6px;overflow-wrap:anywhere}
   .offline{display:none;margin-top:14px;border:1px solid var(--danger);background:color-mix(in srgb,var(--danger) 12%,var(--card));padding:12px 14px;font-size:14px;color:var(--fg)}
   .meter{height:10px;background:var(--field);border:1px solid var(--border);border-radius:2px;overflow:hidden}
   .meterfill{height:100%;width:0;background:var(--accent);transition:width .15s ease}
@@ -92,27 +96,37 @@
     <span class="status"><span id="dot" class="dot loading"></span><span id="statusText">connecting</span></span>
   </header>
   <div id="offline" class="offline">Murmur is not running (or was quit). Start it in a terminal with <b>murmur</b>, then reload this page.</div>
+  <div id="updateBanner" class="update">
+    <b>Murmur <span id="updateVersion"></span> is available.</b> You have <span id="updateCurrent"></span>.
+    <a id="updateChangelog" href="#" target="_blank" rel="noreferrer">See what changed</a>.
+    Quit Murmur, then run:
+    <code>uv tool install --reinstall https://github.com/nkalodner/murmur/archive/refs/heads/main.zip</code>
+  </div>
 
   <section>
     <span class="kicker">Hotkey</span>
     <div class="panel">
-      <div class="row">
+      <p class="hint" style="margin-top:0">Two independent hotkeys. Either can be a single key or two or three held
+      together, and either can be switched off, as long as one is left. Hold one to dictate; a quick tap locks
+      hands-free. While changing, press the key you want, or press the combination together to record it.
+      Esc stays reserved for canceling a recording.</p>
+
+      <div class="kicker" style="letter-spacing:.12em;margin-top:18px">First hotkey</div>
+      <div class="row" style="margin-top:8px">
         <span id="keycap" class="keycap">ctrl_r</span>
         <button id="captureBtn" type="button">Change key</button>
+        <button id="clearKey1" type="button" class="ghost">Switch off</button>
       </div>
-      <p class="hint">Hold it to dictate; a quick tap locks hands-free. While changing, press the key you want.
-      Esc stays reserved for canceling a recording. Bare keys like right Ctrl, right Alt, or F8 work best;
-      a letter key would still type that letter everywhere.</p>
 
-      <div class="kicker" style="letter-spacing:.12em;margin-top:20px">Second hotkey</div>
-      <p class="hint" style="margin-top:4px">Optional. Another key, or two or three held together, that also starts
-      dictation. Handy when one hand is busy: hold either one. To record a combination, press the keys together
-      while changing.</p>
-      <div class="row" style="margin-top:10px">
-        <span id="keycap2" class="keycap">none</span>
+      <div class="kicker" style="letter-spacing:.12em;margin-top:18px">Second hotkey</div>
+      <div class="row" style="margin-top:8px">
+        <span id="keycap2" class="keycap">off</span>
         <button id="captureBtn2" type="button">Set second</button>
-        <button id="clearKey2" type="button" class="ghost">Clear</button>
+        <button id="clearKey2" type="button" class="ghost">Switch off</button>
       </div>
+      <p class="hint">Bare keys like right Ctrl, right Alt, or F8 work best on their own; a letter key would still
+      type that letter everywhere, so pair it with a modifier. The two cannot overlap: with ctrl_r and
+      ctrl_r+space, the shorter one always fires first.</p>
     </div>
   </section>
 
@@ -179,6 +193,8 @@
         <label class="check"><input type="checkbox" id="pill"><span>Recording pill<span class="sub">Floating overlay while recording (Windows, Linux)</span></span></label>
         <label class="check"><input type="checkbox" id="formatting"><span>Auto-format speech<span class="sub">"one pm" types as 1:00 PM; dates, percents, dollars too</span></span></label>
         <label class="check" id="duckRow"><input type="checkbox" id="duck_audio"><span>Quiet other audio<span class="sub">Turns the volume down while you talk, back up after</span></span></label>
+        <label class="check"><input type="checkbox" id="remove_fillers"><span>Drop filler words<span class="sub">"um" and "uh" never get typed. Edit the list in config.json</span></span></label>
+        <label class="check"><input type="checkbox" id="update_check"><span>Check for updates<span class="sub">Asks GitHub once a day. The only thing Murmur ever sends</span></span></label>
       </div>
       <div class="num" id="duckLevelRow" style="display:none">
         <span>Quiet to<span class="sub">How far down other audio goes while recording. Left is quieter.</span></span>
@@ -273,6 +289,16 @@ function msg(text, kind) {
 function esc(s) { return String(s); } // values only ever land in textContent/value
 
 // ---- render -------------------------------------------------------------
+function renderUpdate(s) {
+  const u = s.update || {};
+  const show = !!u.available;
+  $("updateBanner").style.display = show ? "block" : "none";
+  if (!show) return;
+  $("updateVersion").textContent = u.latest;
+  $("updateCurrent").textContent = u.current;
+  $("updateChangelog").href = u.changelog || "#";
+}
+
 function renderStatus(s) {
   const dot = $("dot");
   let cls = s.state, label = s.state;
@@ -281,6 +307,7 @@ function renderStatus(s) {
   dot.className = "dot " + cls;
   $("statusText").textContent = label + " · v" + s.version;
   $("offline").style.display = "none";
+  renderUpdate(s);
 }
 function renderOffline() {
   $("dot").className = "dot off";
@@ -404,7 +431,7 @@ function renderAll(state) {
   models = state.models || [];
   renderHotkeys();
   renderDevices(); renderVocab(); renderPairs();
-  for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "duck_audio"]) $(id).checked = !!cfg[id];
+  for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "duck_audio", "remove_fillers", "update_check"]) $(id).checked = !!cfg[id];
   for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"]) $(id).value = cfg[id];
   $("threshold").value = cfg.vocab_threshold;
   $("thresholdVal").textContent = Number(cfg.vocab_threshold).toFixed(2);
@@ -445,8 +472,8 @@ async function pollStatus() {
 // "hotkey2"); keys pressed together accumulate into a chord and commit on the
 // first key going back up, the way shortcut recorders usually behave.
 const CAPTURE_FIELDS = {
-  hotkey: { cap: "keycap", btn: "captureBtn", label: "Change key" },
-  hotkey2: { cap: "keycap2", btn: "captureBtn2", label: "Set second" },
+  hotkey: { cap: "keycap", btn: "captureBtn" },
+  hotkey2: { cap: "keycap2", btn: "captureBtn2" },
 };
 const MAX_CHORD_KEYS = 3;
 let captureKeys = [];
@@ -460,19 +487,23 @@ function keyName(code) {
 }
 
 function renderHotkeys() {
-  $("keycap").textContent = cfg.hotkey;
-  $("keycap2").textContent = cfg.hotkey2 || "none";
-  $("clearKey2").style.display = cfg.hotkey2 ? "" : "none";
+  $("keycap").textContent = cfg.hotkey || "off";
+  $("keycap2").textContent = cfg.hotkey2 || "off";
+  $("captureBtn").textContent = cfg.hotkey ? "Change key" : "Set key";
+  $("captureBtn2").textContent = cfg.hotkey2 ? "Change key" : "Set second";
+  // Switching one off is only offered while the other would still be there,
+  // so the page can never leave you with no way to dictate.
+  const both = !!cfg.hotkey && !!cfg.hotkey2;
+  $("clearKey1").style.display = both ? "" : "none";
+  $("clearKey2").style.display = both ? "" : "none";
 }
 
 function stopCapture() {
   if (!capturing) return;
-  const f = CAPTURE_FIELDS[capturing];
-  $(f.cap).classList.remove("listening");
-  $(f.btn).textContent = f.label;
+  $(CAPTURE_FIELDS[capturing].cap).classList.remove("listening");
   capturing = null;
   captureKeys = [];
-  renderHotkeys();
+  renderHotkeys();  // also restores both button labels
 }
 
 function startCapture(field) {
@@ -487,11 +518,12 @@ function startCapture(field) {
 
 $("captureBtn").addEventListener("click", () => startCapture("hotkey"));
 $("captureBtn2").addEventListener("click", () => startCapture("hotkey2"));
-$("clearKey2").addEventListener("click", () => {
-  cfg.hotkey2 = null;
-  renderHotkeys();
-  setDirty(true);
-});
+for (const [id, field] of [["clearKey1", "hotkey"], ["clearKey2", "hotkey2"]])
+  $(id).addEventListener("click", () => {
+    cfg[field] = null;
+    renderHotkeys();
+    setDirty(true);
+  });
 
 document.addEventListener("keydown", (e) => {
   if (!capturing) return;
@@ -547,7 +579,7 @@ $("pairAdd").addEventListener("click", () => {
   if (rows.length) rows[rows.length - 2].focus();
 });
 
-for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "duck_audio"])
+for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "duck_audio", "remove_fillers", "update_check"])
   $(id).addEventListener("change", () => { cfg[id] = $(id).checked; setDirty(true); });
 $("duck_audio").addEventListener("change", renderDuckLevel);
 $("duck_percent").addEventListener("input", () => {

@@ -72,10 +72,10 @@ class App:
         return bool(self.listener and self.listener.hotkey_down)
 
     def _hotkey_label(self) -> str:
-        """How the hotkey reads in logs and the tray, with the second one if set."""
-        if self.cfg.hotkey2 and self.cfg.hotkey2.strip():
-            return f"{self.cfg.hotkey} or {self.cfg.hotkey2}"
-        return self.cfg.hotkey
+        """How the hotkeys read in logs and the tray. Either slot may be off."""
+        from murmur.config import hotkey_specs
+
+        return " or ".join(hotkey_specs(self.cfg)) or "no hotkey"
 
     def _set_state(self, state: State) -> None:
         self._state = state
@@ -235,6 +235,8 @@ class App:
                     vocabulary=cfg.vocabulary,
                     vocab_threshold=cfg.vocab_threshold,
                     formatting=cfg.formatting,
+                    remove_fillers=cfg.remove_fillers,
+                    filler_words=cfg.filler_words,
                     trailing_space=cfg.trailing_space,
                 )
                 if text:
@@ -282,7 +284,7 @@ class App:
             devices = input_devices()
         except Exception as e:
             log.debug("device listing failed: %s", e)
-        from murmur import autostart
+        from murmur import autostart, updates
         from murmur.models import KNOWN_MODELS
 
         return {
@@ -292,6 +294,8 @@ class App:
             "config": cfg,
             "devices": devices,
             "autostart": autostart.status(),
+            # Cache only; the network check runs on its own thread at startup.
+            "update": updates.status(),
             # The curated menu the settings page renders its picker from.
             "models": [asdict(m) for m in KNOWN_MODELS],
         }
@@ -488,6 +492,10 @@ class App:
 
         self._reconcile_pill()
         self._reconcile_ducker()
+        if self.cfg.update_check:
+            from murmur import updates
+
+            updates.check_in_background()
 
         if use_tray:
             try:
@@ -601,6 +609,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--doctor", action="store_true", help="check mic, model, permissions, clipboard and exit"
+    )
+    parser.add_argument(
+        "--check-update",
+        action="store_true",
+        help="ask GitHub whether a newer Murmur exists, then exit",
     )
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--version", action="version", version=f"murmur {__version__}")
@@ -748,6 +761,22 @@ def main(argv: list[str] | None = None) -> int:
             log.error("%s", e)
             return 1
         print("Murmur will start at login." if args.enable_autostart else "Murmur will no longer start at login.")
+        return 0
+    if args.check_update:
+        from murmur import updates
+
+        info = updates.check(force=True)
+        if info["available"]:
+            print(f"Murmur {info['latest']} is available (you have {info['current']}).")
+            print(f"What changed: {info['changelog']}")
+            print("Quit Murmur, then update with:")
+            print("  uv tool install --reinstall "
+                  "https://github.com/nkalodner/murmur/archive/refs/heads/main.zip")
+        elif info["latest"]:
+            print(f"Murmur {info['current']} is the latest version.")
+        else:
+            print("Could not reach GitHub to check. Try again when you are online.")
+            return 1
         return 0
     if args.doctor:
         from murmur.doctor import run as doctor_run
