@@ -46,7 +46,7 @@ class App:
         self._device = find_input_device(cfg.device)
         self.recorder = Recorder(self._device)
         self.transcriber = Transcriber(cfg.model, cfg.quantization, cfg.language)
-        self.sounds = Sounds(cfg.sounds)
+        self.sounds = Sounds(cfg.sounds, cfg.sound_volume / 100)
         self.injector = Injector(cfg.paste, cfg.restore_clipboard_ms, self._hotkey_down)
         self.listener = None  # created in run()
         self.tray = None
@@ -180,7 +180,16 @@ class App:
             self.sounds.play("error")
             return
         self._set_state(State.RECORDING)
-        self.sounds.play("start")
+        # The mic is already open, so without this the take starts with
+        # Murmur's own chime and the model types "mm". Mute up front in case
+        # the cue sounds immediately, then re-anchor from the moment playback
+        # really begins, so the window covers the chime and little else.
+        # The up-front guard also bounds how late a player may start: past
+        # that (a many-times-normal afplay spawn) a sliver of the chime's
+        # fade-in can survive, which is far too quiet to transcribe.
+        bleed = self.sounds.bleed_seconds("start")
+        self.recorder.mute_for(bleed)
+        self.sounds.play("start", on_audible=lambda: self.recorder.mute_for(bleed))
         # After the cue, so the confirmation chime is not the thing we duck.
         if self.ducker:
             self.ducker.duck()
@@ -359,6 +368,7 @@ class App:
 
             self.cfg = new
             self.sounds.enabled = new.sounds
+            self.sounds.volume = new.sound_volume / 100
             self.injector.paste = new.paste
             self.injector.restore_clipboard_ms = new.restore_clipboard_ms
             if new.device != old.device:

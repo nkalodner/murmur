@@ -70,6 +70,7 @@ class Recorder:
         self._chunks: list[np.ndarray] = []
         self._sr = TARGET_SR
         self._level = 0.0  # smoothed input level, 0..1, for the recording pill
+        self._mute_samples = 0  # head-of-take samples to silence (the start chime)
 
     @property
     def active(self) -> bool:
@@ -78,6 +79,19 @@ class Recorder:
     def current_level(self) -> float:
         """Latest smoothed mic level (0..1). A plain float read, GIL-safe."""
         return self._level
+
+    def mute_for(self, seconds: float) -> None:
+        """Silence the next `seconds` of captured audio.
+
+        Murmur's own start chime sounds while this stream is already open, so
+        the mic records it and the model hears the low hum as "mm"/"mmhmm".
+        Counting samples rather than watching the clock keeps the window exact
+        whatever the block size. The count is written once per take here and
+        only drained by the audio callback, so the two never race in practice.
+        """
+        if seconds <= 0:
+            return
+        self._mute_samples = int(seconds * self._sr)
 
     def set_device(self, device: int | None) -> None:
         """Point future recordings at a different input device."""
@@ -90,6 +104,7 @@ class Recorder:
             if self._stream is not None:
                 return
             self._chunks = []
+            self._mute_samples = 0
             try:
                 stream = sd.InputStream(
                     samplerate=TARGET_SR,
@@ -120,10 +135,18 @@ class Recorder:
     def _callback(self, indata, frames, time_info, status) -> None:
         if status:
             log.debug("audio status: %s", status)
-        self._chunks.append(indata.copy())
+        block = indata.copy()
+        if self._mute_samples > 0:
+            # Zero rather than drop, so the take's timing (and the max-seconds
+            # timer) still match the wall clock.
+            n = min(self._mute_samples, len(block))
+            block[:n] = 0.0
+            self._mute_samples -= n
+        self._chunks.append(block)
         # Track a smoothed level for the overlay meter. sqrt spreads quiet
         # speech across the meter; the blend keeps the bars from flickering.
-        rms = float(np.sqrt(np.mean(np.square(indata, dtype=np.float64)))) if indata.size else 0.0
+        # Reading the muted block keeps the chime from bouncing the pill too.
+        rms = float(np.sqrt(np.mean(np.square(block, dtype=np.float64)))) if block.size else 0.0
         target = min(1.0, rms**0.5 * 3.2)
         self._level = self._level * 0.5 + target * 0.5
 
