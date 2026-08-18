@@ -575,12 +575,12 @@ function renderAll(state) {
   $("duckRow").style.display = canDuck ? "" : "none";
   renderDuckLevel();
   renderSoundLevel();
-  // The pill is a Windows/Linux overlay; on macOS the menu-bar dot is the
+  // The pill is a Windows/Linux overlay; on macOS the menu-bar mic is the
   // recording indicator, so the toggle would do nothing there.
   const noPill = state.platform === "darwin";
   $("pill").disabled = noPill;
   $("pillSub").textContent = noPill
-    ? "Windows and Linux only; the menu bar dot covers macOS"
+    ? "Windows and Linux only; the menu bar mic covers macOS"
     : "Floating level bars while you talk (Windows, Linux)";
   renderModelPicker();
   $("language").value = cfg.language || "";

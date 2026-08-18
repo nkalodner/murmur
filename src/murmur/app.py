@@ -58,6 +58,7 @@ class App:
 
         self._lock = threading.RLock()
         self._state = State.IDLE
+        self._paused = False  # tray toggle: hotkeys ignored until unpaused
         self._press_t = 0.0
         self._max_timer: threading.Timer | None = None
         self._jobs: SimpleQueue = SimpleQueue()
@@ -87,6 +88,8 @@ class App:
             name = TRAY_STATE[state]
             if state == State.IDLE and not self.transcriber.ready:
                 name = "loading"
+            if state == State.IDLE and self._paused:
+                name = "paused"
             self.tray.set_state(name)
         if self.pill:
             if state in (State.RECORDING, State.LOCKED):
@@ -138,7 +141,7 @@ class App:
 
     def on_press(self) -> None:
         with self._lock:
-            if self._stopping.is_set():
+            if self._stopping.is_set() or self._paused:
                 return
             if self._state == State.IDLE:
                 self._press_t = time.monotonic()
@@ -464,6 +467,49 @@ class App:
                 "total_pairs": len(self.cfg.replacements),
             }
 
+    def toggle_pause(self) -> None:
+        """Tray: stop listening to the hotkeys until toggled back."""
+        with self._lock:
+            if not self._paused and self._state in (State.RECORDING, State.LOCKED):
+                # Pausing mid-take throws the take away; pause means "stop".
+                self._cancel_max_timer()
+                self.recorder.abort()
+                if self.ducker:
+                    self.ducker.restore()
+                self._state = State.IDLE
+            self._paused = not self._paused
+            self._set_state(self._state)
+        log.info("Dictation %s", "paused" if self._paused else "resumed")
+
+    def is_paused(self) -> bool:
+        return self._paused
+
+    def pick_microphone(self, name: str | None) -> None:
+        """Tray: switch input device; persists like a settings-page save."""
+        self.apply_config({"device": name})
+
+    def tray_mic_choices(self) -> list[tuple[str, bool, "object"]]:
+        from murmur.audio import input_devices
+
+        try:
+            devices = input_devices()
+        except Exception as e:
+            log.debug("device listing failed: %s", e)
+            devices = []
+        return [
+            (label, selected, (lambda v=value: self.pick_microphone(v)))
+            for label, selected, value in mic_choices(devices, self.cfg.device)
+        ]
+
+    def paste_last_transcript(self) -> None:
+        """Tray: re-inject the newest saved dictation at the cursor."""
+        text = last_transcript()
+        if not text:
+            log.info("No transcript to paste yet")
+            return
+        self.injector.inject(text + (" " if self.cfg.trailing_space else ""))
+        log.info("Pasted the last transcript (%d chars)", len(text))
+
     def open_settings(self) -> None:
         if self.settings_url:
             import webbrowser
@@ -551,12 +597,23 @@ class App:
 
         if use_tray:
             try:
+                from murmur import autostart, updates
                 from murmur.tray import Tray
 
                 self.tray = Tray(
-                    lambda: f"Hold {self._hotkey_label()} to dictate. Tap locks, Esc cancels.",
+                    lambda: f"Hold {self._hotkey_label()} to dictate",
                     self.shutdown,
                     on_settings=self.open_settings if self.settings_url else None,
+                    mic_choices=self.tray_mic_choices,
+                    last_transcript=last_transcript,
+                    on_paste_last=self.paste_last_transcript,
+                    is_paused=self.is_paused,
+                    on_toggle_pause=self.toggle_pause,
+                    autostart_state=autostart.status,
+                    on_toggle_autostart=lambda: self.set_autostart(
+                        not autostart.status().get("enabled")
+                    ),
+                    update_available=lambda: bool(updates.status().get("available")),
                 )
             except Exception as e:
                 log.warning("Tray unavailable (%s); running without it. Ctrl+C quits.", e)
@@ -602,6 +659,35 @@ class App:
             self.settings.stop()
         if self.tray:
             self.tray.stop()
+
+
+def last_transcript() -> str | None:
+    """The newest saved dictation, for the tray's Paste last transcript."""
+    from murmur.server import read_history_tail
+
+    entries = read_history_tail(1)
+    text = (entries[0].get("text") or "").strip() if entries else ""
+    return text or None
+
+
+def mic_choices(devices: list[dict], current: str | None) -> list[tuple[str, bool, str | None]]:
+    """(label, selected, config value) rows for the tray's Microphone menu.
+
+    Pure so it is testable: the system default leads, the configured device
+    stays listed (marked) even when it is unplugged right now.
+    """
+    default = next((d["name"] for d in devices if d.get("default")), None)
+    rows: list[tuple[str, bool, str | None]] = [
+        (f"System default{f' ({default})' if default else ''}", not current, None)
+    ]
+    seen = False
+    for d in devices:
+        selected = bool(current) and current == d["name"]
+        seen = seen or selected
+        rows.append((d["name"], selected, d["name"]))
+    if current and not seen:
+        rows.append((f"{current} (not found)", True, current))
+    return rows
 
 
 def _n(count: int, noun: str) -> str:

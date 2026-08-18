@@ -67,6 +67,11 @@ The one exception is the update check: once a day Murmur fetches a version numbe
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
+### 0.11.0
+
+- **The menu bar icon grew a real menu.** Switch the microphone right from the tray (a submenu with a checkmark on the live pick, updating the moment you change it), paste the last transcript again, pause dictation entirely, and toggle Start at login. A row appears when an update exists. Settings and Quit are where they always were.
+- **The icon is a microphone now.** The same mark as Murmur's favicon instead of a plain dot, wearing the same state colors: gray idle, red recording, amber transcribing, dimmed while the model loads or dictation is paused.
+
 ### 0.10.1
 
 - **The settings page got quieter.** Roughly half the words: every setting is one hairline row with its name on the left and its control on the right, toggles included, and each description was cut to the fact you need to decide.
@@ -135,7 +140,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 | Quick-tap Right Ctrl | Starts hands-free recording; tap again to finish |
 | Esc while recording | Cancels, nothing is pasted |
 
-The tray icon shows state: gray is idle, red is recording, amber is transcribing. Short chimes confirm ready, start, stop, and cancel.
+The menu bar icon is a small microphone that wears the state: gray idle, red recording, amber transcribing, dimmed while loading or paused. Its menu covers the day-to-day without opening the settings page: switch the microphone, paste the last transcript, pause dictation, toggle Start at login, and quit. Short chimes confirm ready, start, stop, and cancel.
 
 Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches of audio are split at pauses and transcribed piece by piece. Every transcript is also appended to `~/.murmur/history.jsonl`, so pasting into the wrong window never loses your words.
 
@@ -146,7 +151,7 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 - **Hotkeys**: two independent bindings, and either one starts dictation. Each can be a single key or two or three held together (`cmd+shift`); press the combination while changing to record it. Esc stays reserved for canceling a recording.
   - **Either one can be switched off**, so long as one is left. Want only a two-key combination and no bare key? Switch the first one off. Murmur refuses to leave you with both off, since there would be no way to dictate.
   - The two cannot overlap: if one is contained in the other (`ctrl_r` and `ctrl_r+space`), the shorter one always fires first, so Murmur rejects that pair instead of leaving you with a hotkey that never works.
-- **Recording**: pick a microphone or leave it on the system default, and Test mic listens for about a second and shows where your voice lands on a zoned meter (red silent, amber faint, green good), with a clear "Test complete" line naming the device it heard. The same tab holds the recording pill (a small always-on-top overlay with bars that move to your voice; Windows and Linux, since macOS shows the menu-bar dot instead), the max recording length, and the tap-lock window.
+- **Recording**: pick a microphone or leave it on the system default, and Test mic listens for about a second and shows where your voice lands on a zoned meter (red silent, amber faint, green good), with a clear "Test complete" line naming the device it heard. The same tab holds the recording pill (a small always-on-top overlay with bars that move to your voice; Windows and Linux, since macOS shows the menu-bar mic instead), the max recording length, and the tap-lock window.
 - **Typing**: everything about what lands at your cursor. **Auto-format speech**: spoken times, dates, numbers, and spelled-out acronyms come out written, so "one pm" types as `1:00 PM`, "four thirty" as `4:30`, "twenty twenty six" as `2026`, "fifty percent" as `50%`, and letters said one at a time join up, "W S A" as `WSA`; grammar the model itself writes is trusted, so "which one am I" is never mangled and "A, B, or C" keeps its commas. **Drop filler words**: "um" and "uh" never get typed, and only sounds that are never real words are on the list (`filler_words` in the config takes additions). Plus trailing space, paste versus type-it-out, and the clipboard restore delay.
 - **Sounds**: chimes on or off, with **Chime volume** and its Play preview on the same row (0% is silent without switching chimes off). Murmur mutes the mic for exactly the length of the start cue, so the chime can never be recorded and transcribed as "mm". **Quiet other audio** turns the system volume down while you talk and puts it back at the exact level afterward (off by default; macOS and Windows; the slider sets how far down).
 - **Dictionary**: see below. Recent transcripts sit on the same tab, newest first, so testing an entry is dictate, refresh, check, and the keep-history toggle is right beside the list it feeds.
