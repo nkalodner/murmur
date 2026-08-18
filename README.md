@@ -64,6 +64,11 @@ The one exception is the update check: once a day Murmur fetches a version numbe
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
+### 0.9.0
+
+- **Letters spelled out loud join into an acronym.** Say the letters and "W S A" types as `WSA`, "T F T" as `TFT`, "A R A M" as `ARAM`. Only runs of bare capital letters join, so "Plan A and Plan B" is safe, and the model's own punctuation breaks a run, so "A, B, or C" keeps its commas.
+- **Spoken years and clock times come out as numbers, am/pm or not.** "twenty twenty six" types as `2026`, "nineteen ninety nine" as `1999`, "four thirty" as `4:30`, "three oh five" as `3:05`. Counting runs ("eighteen nineteen twenty") and quantities ("nineteen twenty years ago") are left as spoken. All of it sits under the existing **Auto-format speech** toggle, so one switch turns it off.
+
 ### 0.8.0
 
 - **Filler words get dropped.** "um" and "uh" no longer make it into what gets typed. Deliberately narrow: only sounds that are never real English words, so "umbrella", "uh-huh", and "the sum of" are all safe. On by default, under Behavior; add your own words to `filler_words` in `~/.murmur/config.json` if you want a heavier hand.
@@ -129,7 +134,7 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 - **Quiet other audio**: turns the system volume down while you talk and puts it back at the exact level afterward, so dictating over a video does not fight the speaker. Off by default; macOS and Windows only. The slider sets how far down it goes (20% by default). If your volume is already lower than that, Murmur leaves it alone.
 - **Drop filler words**: "um" and "uh" are removed before the text is typed. Only sounds that are never real words are on the list, so ordinary speech is untouched; `filler_words` in the config file takes additions if you want more removed.
 - **Check for updates**: asks GitHub once a day whether a newer Murmur exists and shows a banner when there is one. The only network request Murmur makes after setup, and it sends nothing about you. Turn it off here if you would rather it never reached out.
-- **Auto-format speech**: spoken times, dates, and numbers come out written. "one pm" types as `1:00 PM`, "three oh five p.m." as `3:05 PM`, "july third" as `July 3rd`, "fifty percent" as `50%`, "twenty dollars" as `$20`, "twenty five" as `25`. Deliberately conservative: anything ambiguous ("five thirty" with no am/pm) stays as spoken, and "which one am I" is never mangled. Toggle under Behavior.
+- **Auto-format speech**: spoken times, dates, numbers, and spelled-out acronyms come out written. "one pm" types as `1:00 PM`, "four thirty" as `4:30`, "july third" as `July 3rd`, "twenty twenty six" as `2026`, "fifty percent" as `50%`, "twenty dollars" as `$20`, and letters said one at a time join up, so "W S A" types as `WSA`. The grammar the model itself writes is trusted: "which one am I" is never mangled, "A, B, or C" keeps its commas, and counting runs like "eighteen nineteen twenty" stay as spoken. Toggle under Behavior.
 - **Model**: pick from the menu (Parakeet v2/v3, Whisper base, Canary 1B v2) or enter any onnx-asr name / Hugging Face repo id via Custom, plus precision and a language code for the models that read one. A new model downloads on first use and loads on the next dictation. See [Choosing a model](#choosing-a-model).
 - **Startup**: Open Murmur at login (Windows and macOS). See [below](#do-i-need-to-keep-the-terminal-open-start-at-login).
 - **Recent transcripts**: the last few dictations, newest first, for testing dictionary entries.
@@ -168,7 +173,7 @@ murmur --import-dictionary murmur-dictionary.json
 | `trailing_space` | `true` | Append a space so back-to-back dictations flow |
 | `history` | `true` | Log transcripts to `~/.murmur/history.jsonl` |
 | `pill` | `true` | Floating recording overlay (Windows/Linux) |
-| `formatting` | `true` | Spoken times/dates/numbers become written forms (1:00 PM, July 3rd, 50%) |
+| `formatting` | `true` | Spoken times/dates/numbers/acronyms become written forms (4:30, 2026, WSA) |
 | `remove_fillers` | `true` | Drop filler words from transcripts before they are typed |
 | `filler_words` | `["um","uh","erm","uhm"]` | The words removed. Add your own for a more aggressive pass |
 | `update_check` | `true` | Ask GitHub once a day whether a newer Murmur exists |
