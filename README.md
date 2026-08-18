@@ -67,7 +67,7 @@ The one exception is the update check: once a day Murmur fetches a version numbe
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
-### 0.9.2
+### 0.10.0
 
 - **The settings page became tabs.** Seven of them (Hotkeys, Recording, Typing, Sounds, Dictionary, Model, App) instead of one long scroll, with the address bar remembering which tab you are on. The old Behavior grab-bag is gone: recording things live with the mic, typing things live together, sounds live with sounds. Recent transcripts moved next to the dictionary they exist to test, the chime volume slider got its Play button on the same row, and Export and Import got proper icons.
 - **The mic test reads like a result now.** The meter is zoned (red silent, amber faint, green good) on a decibel scale, so the bar always lands in the zone the verdict describes, a sweep animation shows while it listens, and a "Test complete" line names the device it heard. Cmd/Ctrl+S saves from anywhere on the page, the vocabulary and replacement lists show counts and say something useful when empty, and on a Mac the recording-pill toggle now explains itself instead of silently doing nothing.
@@ -137,7 +137,7 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 
 ## Settings
 
-`murmur --settings` opens the settings page, starting Murmur first if it needs to. It is also in the tray menu, and double-clicking the tray icon opens it on Windows. The page is served by Murmur itself on `127.0.0.1` only; nothing leaves your machine. Changes apply immediately, including the hotkey, and persist to `~/.murmur/config.json`. Since 0.9.2 the page is organized as seven tabs instead of one long scroll:
+`murmur --settings` opens the settings page, starting Murmur first if it needs to. It is also in the tray menu, and double-clicking the tray icon opens it on Windows. The page is served by Murmur itself on `127.0.0.1` only; nothing leaves your machine. Changes apply immediately, including the hotkey, and persist to `~/.murmur/config.json`. Since 0.10.0 the page is organized as seven tabs instead of one long scroll:
 
 - **Hotkeys**: two independent bindings, and either one starts dictation. Each can be a single key or two or three held together (`cmd+shift`); press the combination while changing to record it. Esc stays reserved for canceling a recording.
   - **Either one can be switched off**, so long as one is left. Want only a two-key combination and no bare key? Switch the first one off. Murmur refuses to leave you with both off, since there would be no way to dictate.
