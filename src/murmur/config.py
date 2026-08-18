@@ -34,7 +34,7 @@ class Config:
     trailing_space: bool = True  # append a space so the next dictation flows on
     history: bool = True  # append transcripts to ~/.murmur/history.jsonl
     pill: bool = True  # show the floating recording pill (Windows/Linux)
-    formatting: bool = True  # spoken times/dates/numbers -> written forms (1:00 PM)
+    formatting: bool = True  # spoken times/dates/numbers/acronyms -> written forms (4:30, WSA)
     duck_audio: bool = False  # turn other audio down while recording (macOS/Windows)
     duck_percent: int = 20  # output volume to duck to, as a percentage
     remove_fillers: bool = True  # drop "um"/"uh" from transcripts before pasting
