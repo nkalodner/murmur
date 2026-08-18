@@ -62,6 +62,10 @@ class App:
         self._max_timer: threading.Timer | None = None
         self._jobs: SimpleQueue = SimpleQueue()
         self._stopping = threading.Event()
+        # macOS grants as they stood when the hotkey listener started; the
+        # settings page compares against the live status to say "granted,
+        # now quit and reopen" at exactly the right moment.
+        self._perms_at_start: dict = {}
         self._worker = threading.Thread(
             target=self._worker_loop, name="murmur-worker", daemon=True
         )
@@ -287,6 +291,9 @@ class App:
         from murmur import autostart, updates
         from murmur.models import KNOWN_MODELS
 
+        from murmur.macos import permission_status, restart_needed
+
+        perms = permission_status()
         return {
             "state": state,
             "model_ready": model_ready,
@@ -298,6 +305,14 @@ class App:
             "update": updates.status(),
             # The curated menu the settings page renders its picker from.
             "models": [asdict(m) for m in KNOWN_MODELS],
+            # Live macOS grants, plus whether a grant arrived after the hotkey
+            # listener started (which leaves it dead until Murmur reopens).
+            # The page polls this, so the banner flips the moment a toggle does.
+            "permissions": {
+                "relevant": sys.platform == "darwin",
+                **perms,
+                "restart_needed": restart_needed(self._perms_at_start, perms),
+            },
         }
 
     def apply_config(self, data: dict) -> list[str]:
@@ -447,14 +462,41 @@ class App:
 
     # -- lifecycle -----------------------------------------------------------
 
+    def _watch_permissions(self) -> None:
+        """Poll for macOS grants that were missing at launch and say, the
+        moment one lands, whether it works now or needs a restart first.
+        Runs as a daemon thread; exits once nothing is left to watch."""
+        from murmur.macos import permission_status
+
+        waiting = {k for k, v in self._perms_at_start.items() if v is False}
+        while waiting and not self._stopping.wait(3):
+            now = permission_status()
+            if "input_monitoring" in waiting and now.get("input_monitoring"):
+                waiting.discard("input_monitoring")
+                log.warning(
+                    "Input Monitoring is granted now. One more step: quit Murmur and "
+                    "start it again. The hotkey only attaches at launch, so this copy "
+                    "cannot see it yet."
+                )
+            if "accessibility" in waiting and now.get("accessibility"):
+                waiting.discard("accessibility")
+                log.warning("Accessibility is granted now. Pasting works from here; no restart needed.")
+
     def run(self, use_tray: bool = True, open_settings: bool = False) -> None:
         from murmur.hotkey import HotkeyListener
 
         if sys.platform == "darwin":
-            from murmur.macos import preflight
+            from murmur.macos import permission_status, preflight
 
+            # Before the listener exists: this snapshot is what "the hotkey
+            # attached without Input Monitoring" is judged against.
+            self._perms_at_start = permission_status()
             for problem in preflight():
                 log.warning("%s", problem)
+            if any(v is False for v in self._perms_at_start.values()):
+                threading.Thread(
+                    target=self._watch_permissions, name="murmur-perms", daemon=True
+                ).start()
 
         try:
             from murmur.audio import preflight as mic_preflight

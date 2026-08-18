@@ -17,7 +17,7 @@ I develop Murmur inside my personal site's monorepo, and every change is auto-pu
 
 You need [uv](https://docs.astral.sh/uv/), which installs and manages Python for you, and git.
 
-Install uv on macOS:
+**1. Install uv** (once per computer). On macOS:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -29,7 +29,9 @@ Or on Windows (PowerShell):
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-Then, in a fresh terminal on either platform, clone this repo and install it:
+**2. Open a new terminal window.** Close the one you just used and open a fresh one; only a new window knows where uv landed, so the next step is typed there.
+
+**3. Clone this repo, install it, and run it** (either platform):
 
 ```bash
 git clone https://github.com/nkalodner/murmur.git
@@ -48,11 +50,12 @@ Notes:
 - The model downloads once from Hugging Face (about 700 MB) into your user cache. `murmur --download` grabs it ahead of time if you prefer.
 - macOS asks for three permissions, all granted to your terminal app (Terminal, iTerm, and so on), since that is what runs Murmur:
   - **Microphone**: prompted automatically at launch.
-  - **Input Monitoring**: lets Murmur see the hotkey. The prompt appears at launch; approve it and restart Murmur.
+  - **Input Monitoring**: lets Murmur see the hotkey. The prompt appears at launch; approve it and restart Murmur. The hotkey only attaches when Murmur starts, so a grant made while it is running does nothing until you quit and reopen it. The terminal and the settings page both tell you when that restart is the one step left.
   - **Accessibility**: lets Murmur paste. System Settings > Privacy & Security > Accessibility > enable your terminal.
+  - **When all three are granted, restart your computer once.** Every permission applies cleanly at the next launch, and the key just works from then on.
 - Windows needs no special permissions. To dictate into apps running as administrator, launch Murmur from an administrator terminal too.
 
-`murmur --doctor` checks mic, model cache, permissions, and clipboard in one pass.
+`murmur --doctor` checks mic, model cache, permissions, and clipboard in one pass, and the settings page shows a banner whenever a permission still stands between you and a working hotkey.
 
 ### What Murmur sends
 
@@ -63,6 +66,13 @@ The one exception is the update check: once a day Murmur fetches a version numbe
 ## What's new
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
+
+### 0.9.0
+
+- **Letters spelled out loud join into an acronym.** Say the letters and "W S A" types as `WSA`, "T F T" as `TFT`, "A R A M" as `ARAM`. Only runs of bare capital letters join, so "Plan A and Plan B" is safe, and the model's own punctuation breaks a run, so "A, B, or C" keeps its commas.
+- **Spoken years and clock times come out as numbers, am/pm or not.** "twenty twenty six" types as `2026`, "nineteen ninety nine" as `1999`, "four thirty" as `4:30`, "three oh five" as `3:05`. Counting runs ("eighteen nineteen twenty") and quantities ("nineteen twenty years ago") are left as spoken. All of it sits under the existing **Auto-format speech** toggle, so one switch turns it off.
+- **Setup says when it will actually work.** On a Mac, the settings page now shows a live banner while a permission is missing, and the moment you grant Input Monitoring it flips to the one remaining step: quit Murmur and open it again, because the hotkey only attaches at launch. The terminal says the same thing the moment the grant lands. The install instructions now spell out the new-terminal step and recommend one computer restart after granting the permissions, which makes everything stick.
+- **The start chime is clean on the Mac.** The cue used to play through the app's own audio pipeline while the microphone stream was open, and those two competing is what left a little static in it no matter how the buffers were tuned. Chimes on macOS now go through the system's own sound player instead, the same path a notification sound takes, so the mic stream can no longer scratch them up. Windows keeps the path it already had.
 
 ### 0.8.0
 
@@ -129,7 +139,7 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 - **Quiet other audio**: turns the system volume down while you talk and puts it back at the exact level afterward, so dictating over a video does not fight the speaker. Off by default; macOS and Windows only. The slider sets how far down it goes (20% by default). If your volume is already lower than that, Murmur leaves it alone.
 - **Drop filler words**: "um" and "uh" are removed before the text is typed. Only sounds that are never real words are on the list, so ordinary speech is untouched; `filler_words` in the config file takes additions if you want more removed.
 - **Check for updates**: asks GitHub once a day whether a newer Murmur exists and shows a banner when there is one. The only network request Murmur makes after setup, and it sends nothing about you. Turn it off here if you would rather it never reached out.
-- **Auto-format speech**: spoken times, dates, and numbers come out written. "one pm" types as `1:00 PM`, "three oh five p.m." as `3:05 PM`, "july third" as `July 3rd`, "fifty percent" as `50%`, "twenty dollars" as `$20`, "twenty five" as `25`. Deliberately conservative: anything ambiguous ("five thirty" with no am/pm) stays as spoken, and "which one am I" is never mangled. Toggle under Behavior.
+- **Auto-format speech**: spoken times, dates, numbers, and spelled-out acronyms come out written. "one pm" types as `1:00 PM`, "four thirty" as `4:30`, "july third" as `July 3rd`, "twenty twenty six" as `2026`, "fifty percent" as `50%`, "twenty dollars" as `$20`, and letters said one at a time join up, so "W S A" types as `WSA`. The grammar the model itself writes is trusted: "which one am I" is never mangled, "A, B, or C" keeps its commas, and counting runs like "eighteen nineteen twenty" stay as spoken. Toggle under Behavior.
 - **Model**: pick from the menu (Parakeet v2/v3, Whisper base, Canary 1B v2) or enter any onnx-asr name / Hugging Face repo id via Custom, plus precision and a language code for the models that read one. A new model downloads on first use and loads on the next dictation. See [Choosing a model](#choosing-a-model).
 - **Startup**: Open Murmur at login (Windows and macOS). See [below](#do-i-need-to-keep-the-terminal-open-start-at-login).
 - **Recent transcripts**: the last few dictations, newest first, for testing dictionary entries.
@@ -168,7 +178,7 @@ murmur --import-dictionary murmur-dictionary.json
 | `trailing_space` | `true` | Append a space so back-to-back dictations flow |
 | `history` | `true` | Log transcripts to `~/.murmur/history.jsonl` |
 | `pill` | `true` | Floating recording overlay (Windows/Linux) |
-| `formatting` | `true` | Spoken times/dates/numbers become written forms (1:00 PM, July 3rd, 50%) |
+| `formatting` | `true` | Spoken times/dates/numbers/acronyms become written forms (4:30, 2026, WSA) |
 | `remove_fillers` | `true` | Drop filler words from transcripts before they are typed |
 | `filler_words` | `["um","uh","erm","uhm"]` | The words removed. Add your own for a more aggressive pass |
 | `update_check` | `true` | Ask GitHub once a day whether a newer Murmur exists |
@@ -237,7 +247,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
     Remove-Item -Recurse -Force "$env:APPDATA\uv\tools\murmur-dictation"
     ```
     If it still will not delete, reboot and run those lines before opening anything else. Your settings (`~/.murmur`) and the downloaded model are untouched.
-- **Hotkey does nothing (macOS)**: Input Monitoring permission is missing. `murmur --doctor` confirms it; grant it to your terminal and restart Murmur.
+- **Hotkey does nothing (macOS)**: Input Monitoring permission is missing, or it was granted while Murmur was already running. The hotkey only attaches at launch, so the fix is always the same: grant it to your terminal (`murmur --doctor` and the settings page both confirm which state you are in), then quit Murmur and open it again. Granted it and it still does nothing? Restart the computer once; that clears every cached permission state.
 - **Nothing pastes (macOS)**: same story with the Accessibility permission.
 - **The hotkey or pasting stops after an update (macOS)**: macOS ties Input Monitoring and Accessibility to the exact program, and `uv tool install --reinstall` can reset them. Re-grant in System Settings > Privacy & Security; `murmur --doctor` shows what is missing.
 - **A key you rebound to does nothing (macOS)**: some top-row F-keys are media keys (volume, brightness) that Murmur cannot see. Hold Fn while pressing it, enable "Use F1, F2, etc. keys as standard function keys" in System Settings, or pick a bare modifier like `cmd_r`.
