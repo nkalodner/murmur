@@ -147,13 +147,18 @@ class SettingsServer:
                     if cue not in CUES:
                         cue = "start"
                     # Honor the test even if cues are turned off, without
-                    # changing the persisted setting.
-                    was = app.sounds.enabled
+                    # changing the persisted setting. The page sends the
+                    # volume slider's live value, so a preview matches what
+                    # saving would give you.
+                    was, was_volume = app.sounds.enabled, app.sounds.volume
                     app.sounds.enabled = True
+                    level = data.get("volume")
+                    if isinstance(level, (int, float)) and not isinstance(level, bool):
+                        app.sounds.volume = min(100.0, max(0.0, float(level))) / 100
                     try:
                         app.sounds.play(cue)
                     finally:
-                        app.sounds.enabled = was
+                        app.sounds.enabled, app.sounds.volume = was, was_volume
                     self._json(200, {"ok": True})
                 elif path == "/api/test-mic":
                     try:

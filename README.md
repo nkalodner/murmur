@@ -67,6 +67,11 @@ The one exception is the update check: once a day Murmur fetches a version numbe
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
+### 0.9.1
+
+- **The chime stopped ending up in your transcript.** The start cue sounds while the mic is already recording, so it was landing in the audio and the model typed it as "mm" or "mmhmm". Murmur now silences the microphone for exactly as long as the cue plays, so the take begins with your voice and nothing else. Nothing is lost from what you say: the muted stretch is the chime, which is over before you start talking.
+- **Chime volume is yours to set.** A slider under Behavior, from 100% down to 0%. 0% silences the cues without turning the chimes off, so the timing (and the mic muting that goes with it) stays exactly as it was. The Play button previews the level you are dragging to, before you save.
+
 ### 0.9.0
 
 - **Letters spelled out loud join into an acronym.** Say the letters and "W S A" types as `WSA`, "T F T" as `TFT`, "A R A M" as `ARAM`. Only runs of bare capital letters join, so "Plan A and Plan B" is safe, and the model's own punctuation breaks a run, so "A, B, or C" keeps its commas.
@@ -134,7 +139,7 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
   - The two cannot overlap: if one is contained in the other (`ctrl_r` and `ctrl_r+space`), the shorter one always fires first, so Murmur rejects that pair instead of leaving you with a hotkey that never works.
 - **Microphone**: pick a specific input, or leave it on the system default. Test mic records about a second and shows the level, so you can confirm it hears you before saving.
 - **Dictionary**: see below.
-- **Behavior**: chimes, paste versus type, trailing space, history, the recording pill, max recording length, tap-lock window, clipboard restore delay. The start-recording cue is a soft low tone; the Play button next to it previews it.
+- **Behavior**: chimes, paste versus type, trailing space, history, the recording pill, max recording length, tap-lock window, clipboard restore delay. The start-recording cue is a soft low tone; the Play button next to it previews it, and **Chime volume** sets how loud every cue is (0% is silent). Murmur mutes the mic for exactly the length of the start cue, so the chime can never be recorded and transcribed as "mm".
 - **Recording pill**: a small always-on-top overlay near the bottom of the screen while you talk, just a status dot and bars that move to your voice, no text (Windows and Linux; macOS shows the tray dot instead, since Tk can't share the menu-bar thread). Toggle it under Behavior.
 - **Quiet other audio**: turns the system volume down while you talk and puts it back at the exact level afterward, so dictating over a video does not fight the speaker. Off by default; macOS and Windows only. The slider sets how far down it goes (20% by default). If your volume is already lower than that, Murmur leaves it alone.
 - **Drop filler words**: "um" and "uh" are removed before the text is typed. Only sounds that are never real words are on the list, so ordinary speech is untouched; `filler_words` in the config file takes additions if you want more removed.
@@ -171,6 +176,7 @@ murmur --import-dictionary murmur-dictionary.json
 | `language` | `null` | Only read by whisper/canary models; Parakeet v3 auto-detects |
 | `device` | `null` | Mic name substring; `null` uses the system default |
 | `sounds` | `true` | Audio cues on state changes |
+| `sound_volume` | `100` | How loud the cues are, 0-100; `0` is silent |
 | `paste` | `true` | `false` types character by character instead of pasting |
 | `restore_clipboard_ms` | `600` | Delay before restoring your previous clipboard; `-1` never restores |
 | `tap_lock_ms` | `350` | Presses shorter than this lock hands-free recording |

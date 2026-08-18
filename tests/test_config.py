@@ -142,6 +142,25 @@ def test_validate_rejects_bad_ducking(cfg):
         validate(cfg)
 
 
+# ── chime volume ───────────────────────────────────────────────────────
+
+
+def test_validate_accepts_chime_volume():
+    validate(Config(sound_volume=0))
+    validate(Config(sound_volume=100))
+
+
+@pytest.mark.parametrize("cfg", [
+    Config(sound_volume=-1),
+    Config(sound_volume=101),
+    Config(sound_volume=True),   # a bool is not a level
+    Config(sound_volume="loud"),
+])
+def test_validate_rejects_bad_chime_volume(cfg):
+    with pytest.raises(ValueError):
+        validate(cfg)
+
+
 def test_new_keys_round_trip(tmp_path):
     path = tmp_path / "config.json"
     cfg = Config(hotkey="f8", hotkey2="cmd+shift", duck_audio=True, duck_percent=35)

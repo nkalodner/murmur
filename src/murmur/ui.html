@@ -203,11 +203,15 @@
         <span>Quiet to<span class="sub">How far down other audio goes while recording. Left is quieter.</span></span>
         <span class="row" style="gap:8px"><input type="range" id="duck_percent" min="0" max="80" step="5"><span id="duckPercentVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">20%</span></span>
       </div>
+      <div class="num">
+        <span>Chime volume<span class="sub">How loud the cues are. 0% silences them without turning the chimes off.</span></span>
+        <span class="row" style="gap:8px"><input type="range" id="sound_volume" min="0" max="100" step="5"><span id="soundVolumeVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">100%</span></span>
+      </div>
       <div class="grid2" style="margin-top:6px">
         <div class="num"><span>Max recording<span class="sub">Seconds before a take auto-stops</span></span><input type="number" id="max_seconds" min="5" max="1800"></div>
         <div class="num"><span>Tap lock<span class="sub">Presses shorter than this (ms) go hands-free</span></span><input type="number" id="tap_lock_ms" min="50" max="2000"></div>
         <div class="num"><span>Clipboard restore<span class="sub">Delay in ms; -1 keeps the transcript on the clipboard</span></span><input type="number" id="restore_clipboard_ms" min="-1" max="60000"></div>
-        <div class="num"><span>Start sound<span class="sub">The soft cue when a recording begins</span></span><button id="testSound" type="button">Play</button></div>
+        <div class="num"><span>Start sound<span class="sub">The soft cue when a recording begins. Plays at the volume above.</span></span><button id="testSound" type="button">Play</button></div>
       </div>
     </div>
   </section>
@@ -467,6 +471,8 @@ function renderAll(state) {
   $("thresholdVal").textContent = Number(cfg.vocab_threshold).toFixed(2);
   $("duck_percent").value = cfg.duck_percent;
   $("duckPercentVal").textContent = cfg.duck_percent + "%";
+  $("sound_volume").value = cfg.sound_volume;
+  $("soundVolumeVal").textContent = cfg.sound_volume + "%";
   // Ducking only has a backend on macOS and Windows.
   canDuck = state.platform === "darwin" || state.platform === "win32";
   $("duckRow").style.display = canDuck ? "" : "none";
@@ -617,6 +623,11 @@ $("duck_percent").addEventListener("input", () => {
   $("duckPercentVal").textContent = cfg.duck_percent + "%";
   setDirty(true);
 });
+$("sound_volume").addEventListener("input", () => {
+  cfg.sound_volume = parseInt($("sound_volume").value, 10);
+  $("soundVolumeVal").textContent = cfg.sound_volume + "%";
+  setDirty(true);
+});
 for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"])
   $(id).addEventListener("input", () => { cfg[id] = parseInt($(id).value, 10); setDirty(true); });
 $("threshold").addEventListener("input", () => {
@@ -673,7 +684,7 @@ $("dictFile").addEventListener("change", async () => {
 });
 
 $("testSound").addEventListener("click", () => {
-  fetch("/api/test-sound", { method: "POST", headers: HEADERS, body: JSON.stringify({ cue: "start" }) }).catch(() => renderOffline());
+  fetch("/api/test-sound", { method: "POST", headers: HEADERS, body: JSON.stringify({ cue: "start", volume: cfg.sound_volume }) }).catch(() => renderOffline());
 });
 
 $("testMic").addEventListener("click", async () => {

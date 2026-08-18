@@ -27,6 +27,7 @@ class Config:
     language: str | None = None  # only read by whisper/canary models; parakeet v3 auto-detects
     device: str | None = None  # input device name substring; null = system default mic
     sounds: bool = True
+    sound_volume: int = 100  # chime loudness, 0-100 percent; 0 is silent
     paste: bool = True  # false = type character by character instead of pasting
     restore_clipboard_ms: int = 600  # delay before restoring the previous clipboard; -1 = never restore
     tap_lock_ms: int = 350  # a press shorter than this locks hands-free recording
@@ -217,6 +218,7 @@ def validate(cfg: Config) -> None:
         if not isinstance(getattr(cfg, name), bool):
             raise ValueError(f"{name} must be true or false")
     _int_in("duck_percent", cfg.duck_percent, 0, 100)
+    _int_in("sound_volume", cfg.sound_volume, 0, 100)
     _int_in("tap_lock_ms", cfg.tap_lock_ms, 50, 2000)
     _int_in("max_seconds", cfg.max_seconds, 5, 1800)
     _int_in("restore_clipboard_ms", cfg.restore_clipboard_ms, -1, 60000)

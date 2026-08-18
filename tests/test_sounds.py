@@ -6,9 +6,12 @@ import wave
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 import murmur.sounds as sounds
-from murmur.sounds import CUES, GAINS, SR, VOLUME, Sounds, cue_path, render
+from murmur.sounds import (
+    CUES, GAINS, SR, TAIL_MARGIN, VOLUME, Sounds, cue_path, duration, render,
+)
 
 
 def test_every_cue_has_a_gain():
@@ -87,3 +90,95 @@ def test_play_survives_no_afplay_and_no_audio(monkeypatch):
     Sounds().play("start")
     Sounds(enabled=False).play("start")  # disabled: a plain no-op
     Sounds().play("no-such-cue")
+
+
+# ── volume ─────────────────────────────────────────────────────────────
+
+
+def test_volume_scales_amplitude_linearly():
+    for name in CUES:
+        full = np.max(np.abs(render(name)))
+        assert np.max(np.abs(render(name, 0.5))) == pytest.approx(full / 2, rel=1e-5)
+        assert not render(name, 0.0).any()
+
+
+def test_volume_is_clamped_not_trusted():
+    # A config edited by hand must not be able to push a cue past the ceiling.
+    for name in CUES:
+        loud = render(name, 5.0)
+        assert np.max(np.abs(loud)) <= VOLUME * GAINS[name] + 1e-6
+        assert not render(name, -1.0).any()
+
+
+def test_volume_change_writes_its_own_cue_file(tmp_path):
+    quiet = cue_path("start", tmp_path, volume=0.3)
+    loud = cue_path("start", tmp_path, volume=1.0)
+    assert quiet != loud  # the checksum in the name keeps them apart
+    assert loud.exists()  # and the newer one really landed
+
+
+def test_silent_settings_play_nothing(monkeypatch):
+    played = []
+    monkeypatch.setattr(sounds.sys, "platform", "darwin")
+    monkeypatch.setattr(sounds.shutil, "which", lambda cmd: "/usr/bin/afplay")
+    monkeypatch.setattr(sounds.subprocess, "run", lambda cmd, **kw: played.append(cmd))
+    Sounds(volume=0.0).play("start")
+    Sounds(enabled=False, volume=1.0).play("start")
+    threading.Event().wait(0.2)
+    assert played == []
+
+
+# ── chime bleed ────────────────────────────────────────────────────────
+
+
+def test_bleed_covers_the_whole_cue_plus_margin():
+    # What the recorder mutes has to outlast what the speaker plays, or the
+    # tail of the chime still lands in the take.
+    s = Sounds(volume=1.0)
+    assert s.bleed_seconds("start") == pytest.approx(duration("start") + TAIL_MARGIN)
+    assert s.bleed_seconds("start") > duration("start")
+
+
+def test_bleed_stays_close_to_the_cue():
+    # The window is muted speech as well as muted chime, so it must not run
+    # far past the cue. A player's start-up delay is handled by re-anchoring
+    # (on_audible), never by padding this out.
+    s = Sounds(volume=1.0)
+    assert s.bleed_seconds("start") - duration("start") <= 0.08
+
+
+def test_on_audible_fires_before_the_player_runs(monkeypatch, tmp_path):
+    import murmur.config
+
+    monkeypatch.setattr(murmur.config, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(sounds.sys, "platform", "darwin")
+    monkeypatch.setattr(sounds.shutil, "which", lambda cmd: "/usr/bin/afplay")
+    order, done = [], threading.Event()
+
+    def fake_run(cmd, **kwargs):
+        order.append("play")
+        done.set()
+
+    monkeypatch.setattr(sounds.subprocess, "run", fake_run)
+    Sounds().play("start", on_audible=lambda: order.append("mute"))
+    assert done.wait(2)
+    # Muting after the sound started would leave the chime's head in the take.
+    assert order == ["mute", "play"]
+
+
+def test_on_audible_is_skipped_when_nothing_sounds(monkeypatch):
+    monkeypatch.setattr(sounds.sys, "platform", "darwin")
+    monkeypatch.setattr(sounds.shutil, "which", lambda cmd: "/usr/bin/afplay")
+    monkeypatch.setattr(sounds.subprocess, "run", lambda cmd, **kw: None)
+    fired = []
+    Sounds(volume=0.0).play("start", on_audible=lambda: fired.append(1))
+    Sounds(enabled=False).play("start", on_audible=lambda: fired.append(1))
+    threading.Event().wait(0.2)
+    assert fired == []
+
+
+def test_nothing_audible_means_nothing_muted():
+    # No cue, no bleed: muting the head of a take is tied to a real chime.
+    assert Sounds(enabled=False).bleed_seconds("start") == 0.0
+    assert Sounds(volume=0.0).bleed_seconds("start") == 0.0
+    assert Sounds().bleed_seconds("no-such-cue") == 0.0
