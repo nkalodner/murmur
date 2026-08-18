@@ -31,14 +31,39 @@ def test_icon_states_differ_and_dim_states_are_dim():
 
 
 def test_icon_is_a_mic_not_a_dot():
-    # The old dot was one blob; the mic has a gap between capsule and base,
-    # so a middle-bottom horizontal band must contain transparent columns
-    # between opaque ones (the stem is narrower than the base).
+    # The old dot was one blob; the mic has a narrow stem between the cradle
+    # and the base, so a band through the stem region must be a thin run.
     a = _alpha(render_icon("idle"))
-    band = a[41:43, :].max(axis=0)  # between arc bottom and base
+    band = a[45:47, :].max(axis=0)  # the stem, between arc bottom and base
     cols = np.flatnonzero(band)
     assert len(cols) > 0
-    assert len(cols) < (cols.max() - cols.min() + 1) or len(cols) < 16  # narrow stem
+    assert len(cols) < 16  # a dot or the base would span far wider
+
+
+def test_icon_has_retro_slats():
+    # The capsule is slatted: alpha at a slat's center must drop well below
+    # the solid band between slats, or the retro texture regressed away.
+    a = _alpha(render_icon("idle"))
+    solid = a[17, 32]   # between the first two slats (y~70 on the 256 grid)
+    slat = a[20, 32]    # inside the second slat (y~79)
+    assert solid > 150
+    assert slat < solid * 0.5
+
+
+def test_icon_has_sound_waves():
+    # One wave arc off each side, past the cradle's horizontal extent.
+    a = _alpha(render_icon("idle"))
+    assert a[:, 49:].sum() > 0  # right wave
+    assert a[:, :11].sum() > 0  # left wave
+
+
+def test_idle_is_menu_bar_white():
+    from murmur.tray import COLORS
+
+    assert all(c >= 230 for c in COLORS["idle"][:3])
+    img = np.asarray(render_icon("idle"))
+    ys, xs = np.nonzero(img[:, :, 3])
+    assert img[ys[0], xs[0], :3].min() >= 230  # drawn pixels really are white
 
 
 def test_mic_choices_marks_the_selection():

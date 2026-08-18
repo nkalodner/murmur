@@ -10,12 +10,15 @@ from typing import Callable
 
 log = logging.getLogger("murmur")
 
+# Idle is menu-bar white so Murmur sits flush with the other icons on a dark
+# macOS menu bar or Windows taskbar; the states keep their colors, and the
+# dimmed states are the same white at lower alpha.
 COLORS = {
-    "loading": (138, 143, 152, 130),
-    "idle": (138, 143, 152, 255),
+    "loading": (235, 236, 240, 130),
+    "idle": (235, 236, 240, 255),
     "recording": (229, 72, 77, 255),
     "busy": (245, 165, 36, 255),
-    "paused": (138, 143, 152, 95),
+    "paused": (235, 236, 240, 95),
 }
 LABELS = {
     "loading": "loading model",
@@ -27,25 +30,41 @@ LABELS = {
 
 
 def render_icon(state: str, size: int = 64):
-    """The tray mark: the site's mic silhouette (capsule, pickup arc, stem,
-    base) in the state color. Drawn 4x and downscaled so the arc stays smooth
-    at menu-bar sizes; loading and paused read as the same mic, dimmed."""
+    """The tray mark: a retro broadcast mic in the state color — slatted
+    capsule, cradle arc, stem, base, one sound wave off each side. Drawn 4x on
+    a 256 grid and downscaled so the curves stay smooth at menu-bar sizes;
+    loading and paused read as the same mic, dimmed. The slats are punched
+    through the capsule's alpha so they stay crisp on any background."""
+    import numpy as np
     from PIL import Image, ImageDraw
 
     S = size * 4
-    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    color = COLORS.get(state, COLORS["idle"])
     u = S / 256  # geometry authored on a 256 grid, scaled to the canvas
+    layer = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    white = (255, 255, 255, 255)
 
     def box(x0, y0, x1, y1):
         return (x0 * u, y0 * u, x1 * u, y1 * u)
 
-    draw.rounded_rectangle(box(103, 38, 153, 138), radius=25 * u, fill=color)
-    draw.arc(box(78, 64, 178, 164), start=0, end=180, fill=color, width=int(17 * u))
-    draw.rounded_rectangle(box(120, 168, 136, 196), radius=8 * u, fill=color)
-    draw.rounded_rectangle(box(88, 198, 168, 214), radius=8 * u, fill=color)
-    return img.resize((size, size), Image.LANCZOS)
+    draw.rounded_rectangle(box(100, 34, 156, 142), radius=28 * u, fill=white)
+    draw.arc(box(76, 62, 180, 166), start=0, end=180, fill=white, width=int(17 * u))
+    draw.rounded_rectangle(box(120, 170, 136, 198), radius=8 * u, fill=white)
+    draw.rounded_rectangle(box(86, 200, 170, 216), radius=8 * u, fill=white)
+    # one wave per side, centered on the capsule; two per side smear at 22px
+    cx, cy, r = 128, 88, 86
+    for a0, a1 in ((-28, 28), (152, 208)):
+        draw.arc(box(cx - r, cy - r, cx + r, cy + r), start=a0, end=a1,
+                 fill=white, width=int(13 * u))
+    arr = np.array(layer)
+    for y in (58, 79, 100, 121):  # the retro slats, capsule-width only
+        arr[int((y - 4) * u):int((y + 4) * u), int(106 * u):int(150 * u), 3] = 0
+    img = Image.fromarray(arr).resize((size, size), Image.LANCZOS)
+    color = COLORS.get(state, COLORS["idle"])
+    out = np.array(img).astype(np.uint16)
+    out[:, :, 0], out[:, :, 1], out[:, :, 2] = color[0], color[1], color[2]
+    out[:, :, 3] = out[:, :, 3] * color[3] // 255
+    return Image.fromarray(out.astype(np.uint8))
 
 
 class Tray:

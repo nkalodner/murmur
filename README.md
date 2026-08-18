@@ -67,6 +67,10 @@ The one exception is the update check: once a day Murmur fetches a version numbe
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
+### 0.11.1
+
+- **The menu bar mic got its character.** A retro slatted capsule with a sound wave off each side, white at rest so it sits flush with the other menu bar icons instead of reading as a dim gray. The state colors are unchanged: red recording, amber transcribing, dimmed while loading or paused.
+
 ### 0.11.0
 
 - **The menu bar icon grew a real menu.** Switch the microphone right from the tray (a submenu with a checkmark on the live pick, updating the moment you change it), paste the last transcript again, pause dictation entirely, and toggle Start at login. A row appears when an update exists. Settings and Quit are where they always were.
@@ -140,7 +144,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 | Quick-tap Right Ctrl | Starts hands-free recording; tap again to finish |
 | Esc while recording | Cancels, nothing is pasted |
 
-The menu bar icon is a small microphone that wears the state: gray idle, red recording, amber transcribing, dimmed while loading or paused. Its menu covers the day-to-day without opening the settings page: switch the microphone, paste the last transcript, pause dictation, toggle Start at login, and quit. Short chimes confirm ready, start, stop, and cancel.
+The menu bar icon is a small retro microphone with sound waves coming off it, and it wears the state: white when idle (matching the other menu bar icons), red recording, amber transcribing, dimmed while loading or paused. Its menu covers the day-to-day without opening the settings page: switch the microphone, paste the last transcript, pause dictation, toggle Start at login, and quit. Short chimes confirm ready, start, stop, and cancel.
 
 Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches of audio are split at pauses and transcribed piece by piece. Every transcript is also appended to `~/.murmur/history.jsonl`, so pasting into the wrong window never loses your words.
 
