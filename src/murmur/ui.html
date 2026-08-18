@@ -83,9 +83,35 @@
   .perm{display:none;margin-top:14px;border:1px solid var(--busy);
     background:color-mix(in srgb,var(--busy) 12%,var(--card));padding:12px 14px;font-size:14px;color:var(--fg)}
   .offline{display:none;margin-top:14px;border:1px solid var(--danger);background:color-mix(in srgb,var(--danger) 12%,var(--card));padding:12px 14px;font-size:14px;color:var(--fg)}
-  .meter{height:10px;background:var(--field);border:1px solid var(--border);border-radius:2px;overflow:hidden}
-  .meterfill{height:100%;width:0;background:var(--accent);transition:width .15s ease}
+  /* Mic meter: the track is zoned to the same thresholds the verdict uses
+     (silent < 36% < faint < 59% < good on a -60..0 dBFS scale), so the bar
+     and the words can never disagree. */
+  .meter{position:relative;height:12px;border:1px solid var(--border);border-radius:2px;overflow:hidden;
+    background:linear-gradient(to right,
+      color-mix(in srgb,var(--danger) 16%,var(--field)) 0 36%,
+      color-mix(in srgb,var(--busy) 16%,var(--field)) 36% 59%,
+      color-mix(in srgb,hsl(108 40% 52%) 16%,var(--field)) 59% 100%)}
+  .meterfill{height:100%;width:0;background:var(--accent);transition:width .25s ease}
   .meterfill.loud{background:hsl(108 40% 52%)} .meterfill.faint{background:var(--busy)} .meterfill.silent{background:var(--danger)}
+  .meter.listening .meterfill{width:30%;background:var(--accent);opacity:.6;transition:none;animation:sweep 1.1s linear infinite}
+  @keyframes sweep{from{transform:translateX(-110%)}to{transform:translateX(345%)}}
+  .micdone{display:block;margin-top:8px;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-deep)}
+  .micdone.err{color:var(--danger)}
+  .tabs{display:flex;gap:2px;margin-top:24px;border-bottom:1px solid var(--border);position:sticky;top:0;
+    background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(6px);z-index:5;
+    overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;color:var(--muted);
+    font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    padding:10px 12px;cursor:pointer;white-space:nowrap;margin-bottom:-1px}
+  .tab:hover{color:var(--fg);border-bottom-color:var(--border-strong)}
+  .tab[aria-selected="true"]{color:var(--accent-deep);border-bottom-color:var(--accent)}
+  .tabpanel{display:none}
+  .tabpanel.active{display:block}
+  button.withicon{display:inline-flex;align-items:center;gap:7px}
+  button.withicon svg{flex:none}
+  .count{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:0;text-transform:none}
+  .empty{font-size:13px;color:var(--faint);margin-top:10px}
 </style>
 </head>
 <body>
@@ -106,8 +132,19 @@
   </div>
   <div id="permBanner" class="perm"><b id="permTitle"></b> <span id="permBody"></span></div>
 
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Settings sections">
+    <button class="tab" role="tab" data-tab="hotkeys" type="button">Hotkeys</button>
+    <button class="tab" role="tab" data-tab="recording" type="button">Recording</button>
+    <button class="tab" role="tab" data-tab="typing" type="button">Typing</button>
+    <button class="tab" role="tab" data-tab="sounds" type="button">Sounds</button>
+    <button class="tab" role="tab" data-tab="dictionary" type="button">Dictionary</button>
+    <button class="tab" role="tab" data-tab="model" type="button">Model</button>
+    <button class="tab" role="tab" data-tab="app" type="button">App</button>
+  </nav>
+
+  <div class="tabpanel" id="tab-hotkeys" role="tabpanel" aria-label="Hotkeys">
   <section>
-    <span class="kicker">Hotkey</span>
+    <span class="kicker">Hotkeys</span>
     <div class="panel">
       <p class="hint" style="margin-top:0">Two independent hotkeys. Either can be a single key or two or three held
       together, and either can be switched off, as long as one is left. Hold one to dictate; a quick tap locks
@@ -132,7 +169,9 @@
       ctrl_r+space, the shorter one always fires first.</p>
     </div>
   </section>
+  </div>
 
+  <div class="tabpanel" id="tab-recording" role="tabpanel" aria-label="Recording">
   <section>
     <span class="kicker">Microphone</span>
     <div class="panel">
@@ -142,18 +181,76 @@
         <button id="testMic" type="button">Test mic</button>
       </div>
       <div id="micResult" style="display:none;margin-top:12px">
-        <div class="meter"><div id="meterFill" class="meterfill"></div></div>
-        <p id="micMsg" class="hint" style="margin-top:8px"></p>
+        <div class="meter" id="micMeter"><div id="meterFill" class="meterfill"></div></div>
+        <span id="micDone" class="micdone" style="display:none"></span>
+        <p id="micMsg" class="hint" style="margin-top:6px"></p>
       </div>
-      <p class="hint">Applies to the next recording. Test mic records about a second from the selected device and shows the level, so you can confirm it hears you before saving.</p>
+      <p class="hint">Applies to the next recording. Test mic listens for about a second and shows where your
+      voice lands: red is silent, amber is faint, green is good.</p>
     </div>
   </section>
-
   <section>
-    <span class="kicker">Dictionary</span>
+    <span class="kicker">During a take</span>
     <div class="panel">
-      <div class="kicker" style="letter-spacing:.12em">Vocabulary</div>
-      <p class="hint" style="margin-top:4px">Names and jargon, spelled and cased exactly how they should be typed.
+      <label class="check"><input type="checkbox" id="pill"><span>Recording pill<span class="sub" id="pillSub">Floating overlay with live level bars while you talk (Windows, Linux)</span></span></label>
+      <div class="grid2" style="margin-top:6px">
+        <div class="num"><span>Max recording<span class="sub">Seconds before a take auto-stops</span></span><input type="number" id="max_seconds" min="5" max="1800"></div>
+        <div class="num"><span>Tap lock<span class="sub">Presses shorter than this (ms) go hands-free</span></span><input type="number" id="tap_lock_ms" min="50" max="2000"></div>
+      </div>
+    </div>
+  </section>
+  </div>
+
+  <div class="tabpanel" id="tab-typing" role="tabpanel" aria-label="Typing">
+  <section>
+    <span class="kicker">What gets typed</span>
+    <div class="panel">
+      <label class="check"><input type="checkbox" id="formatting"><span>Auto-format speech<span class="sub">"four thirty" types as 4:30, "W S A" as WSA; dates, years, percents too</span></span></label>
+      <label class="check"><input type="checkbox" id="remove_fillers"><span>Drop filler words<span class="sub">"um" and "uh" never get typed. Edit the list in config.json</span></span></label>
+      <label class="check"><input type="checkbox" id="trailing_space"><span>Trailing space<span class="sub">So back-to-back dictations flow</span></span></label>
+    </div>
+  </section>
+  <section>
+    <span class="kicker">How it lands</span>
+    <div class="panel">
+      <label class="check"><input type="checkbox" id="paste"><span>Paste into apps<span class="sub">Off types character by character instead, for apps that reject the paste</span></span></label>
+      <div class="num"><span>Clipboard restore<span class="sub">Delay in ms before your old clipboard comes back; -1 keeps the transcript on it</span></span><input type="number" id="restore_clipboard_ms" min="-1" max="60000"></div>
+    </div>
+  </section>
+  </div>
+
+  <div class="tabpanel" id="tab-sounds" role="tabpanel" aria-label="Sounds">
+  <section>
+    <span class="kicker">Chimes</span>
+    <div class="panel">
+      <label class="check"><input type="checkbox" id="sounds"><span>Chimes<span class="sub">Short cues on start, stop, cancel, ready</span></span></label>
+      <div class="num" id="soundLevelRow">
+        <span>Chime volume<span class="sub">0% is silent without switching chimes off</span></span>
+        <span class="row" style="gap:8px">
+          <input type="range" id="sound_volume" min="0" max="100" step="5">
+          <span id="soundVolumeVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">100%</span>
+          <button id="testSound" type="button" class="withicon" title="Play the start cue at this volume"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>Play</button>
+        </span>
+      </div>
+    </div>
+  </section>
+  <section>
+    <span class="kicker">Other audio</span>
+    <div class="panel">
+      <label class="check" id="duckRow"><input type="checkbox" id="duck_audio"><span>Quiet other audio<span class="sub">Turns the volume down while you talk, back up after</span></span></label>
+      <div class="num" id="duckLevelRow" style="display:none">
+        <span>Quiet to<span class="sub">How far down other audio goes while recording. Left is quieter.</span></span>
+        <span class="row" style="gap:8px"><input type="range" id="duck_percent" min="0" max="80" step="5"><span id="duckPercentVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">20%</span></span>
+      </div>
+    </div>
+  </section>
+  </div>
+
+  <div class="tabpanel" id="tab-dictionary" role="tabpanel" aria-label="Dictionary">
+  <section>
+    <span class="kicker">Vocabulary <span class="count" id="vocabCount"></span></span>
+    <div class="panel">
+      <p class="hint" style="margin-top:0">Names and jargon, spelled and cased exactly how they should be typed.
       Transcripts that come out close snap to your spelling ("pie torch" becomes "PyTorch"). Stick to proper nouns;
       everyday words would get rewritten too.</p>
       <div class="row" style="margin-top:10px">
@@ -162,70 +259,50 @@
       </div>
       <div id="vocabChips" class="chips"></div>
 
-      <div class="kicker" style="letter-spacing:.12em;margin-top:20px">Replacements</div>
-      <p class="hint" style="margin-top:4px">Exact fixes for things the model reliably mishears: whenever the left side
-      shows up in a transcript, the right side is typed instead.</p>
-      <div id="pairs" class="pairs"></div>
-      <div class="row" style="margin-top:10px"><button id="pairAdd" type="button">Add replacement</button></div>
-
       <div class="num" style="margin-top:14px">
         <span>Match sensitivity<span class="sub">How close a word must sound before it snaps to your vocabulary. Left catches more, right is stricter.</span></span>
         <span class="row" style="gap:8px"><input type="range" id="threshold" min="0.70" max="0.95" step="0.01"><span id="thresholdVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">0.82</span></span>
       </div>
-
-      <div class="kicker" style="letter-spacing:.12em;margin-top:20px">Move between devices</div>
-      <p class="hint" style="margin-top:4px">Export writes every word and replacement to a small file. Import reads
+    </div>
+  </section>
+  <section>
+    <span class="kicker">Replacements <span class="count" id="pairCount"></span></span>
+    <div class="panel">
+      <p class="hint" style="margin-top:0">Exact fixes for things the model reliably mishears: whenever the left side
+      shows up in a transcript, the right side is typed instead.</p>
+      <div id="pairs" class="pairs"></div>
+      <div class="row" style="margin-top:10px"><button id="pairAdd" type="button">Add replacement</button></div>
+    </div>
+  </section>
+  <section>
+    <span class="kicker">Move between devices</span>
+    <div class="panel">
+      <p class="hint" style="margin-top:0">Export writes every word and replacement to a small file. Import reads
       that file on another device and folds it in: duplicates are skipped and this device's entries always win, so
       importing never loses anything.</p>
       <div class="row" style="margin-top:10px">
-        <button id="dictExport" type="button">Export dictionary</button>
-        <button id="dictImport" type="button">Import dictionary</button>
+        <button id="dictExport" type="button" class="withicon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v11"/><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/><path d="M4.5 20.5h15"/></svg>Export dictionary</button>
+        <button id="dictImport" type="button" class="withicon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M6.5 9.5 12 4l5.5 5.5"/><path d="M4.5 20.5h15"/></svg>Import dictionary</button>
         <input type="file" id="dictFile" accept=".json,application/json" style="display:none">
       </div>
     </div>
   </section>
-
   <section>
-    <span class="kicker">Behavior</span>
+    <span class="kicker">Recent transcripts</span>
     <div class="panel">
-      <div class="grid2">
-        <label class="check"><input type="checkbox" id="sounds"><span>Chimes<span class="sub">Short cues on start, stop, cancel, ready</span></span></label>
-        <label class="check"><input type="checkbox" id="paste"><span>Paste into apps<span class="sub">Off types character by character instead</span></span></label>
-        <label class="check"><input type="checkbox" id="trailing_space"><span>Trailing space<span class="sub">So back-to-back dictations flow</span></span></label>
-        <label class="check"><input type="checkbox" id="history"><span>Keep history<span class="sub">Transcripts saved to ~/.murmur/history.jsonl</span></span></label>
-        <label class="check"><input type="checkbox" id="pill"><span>Recording pill<span class="sub">Floating overlay while recording (Windows, Linux)</span></span></label>
-        <label class="check"><input type="checkbox" id="formatting"><span>Auto-format speech<span class="sub">"four thirty" types as 4:30, "W S A" as WSA; dates, years, percents too</span></span></label>
-        <label class="check" id="duckRow"><input type="checkbox" id="duck_audio"><span>Quiet other audio<span class="sub">Turns the volume down while you talk, back up after</span></span></label>
-        <label class="check"><input type="checkbox" id="remove_fillers"><span>Drop filler words<span class="sub">"um" and "uh" never get typed. Edit the list in config.json</span></span></label>
-        <label class="check"><input type="checkbox" id="update_check"><span>Check for updates<span class="sub">Asks GitHub once a day. The only thing Murmur ever sends</span></span></label>
+      <div class="row" style="justify-content:space-between">
+        <span class="hint" style="margin:0">The last few dictations, newest first. Dictate, refresh, and check an entry landed.</span>
+        <button id="historyReload" type="button">Refresh</button>
       </div>
-      <div class="num" id="duckLevelRow" style="display:none">
-        <span>Quiet to<span class="sub">How far down other audio goes while recording. Left is quieter.</span></span>
-        <span class="row" style="gap:8px"><input type="range" id="duck_percent" min="0" max="80" step="5"><span id="duckPercentVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">20%</span></span>
-      </div>
-      <div class="num">
-        <span>Chime volume<span class="sub">How loud the cues are. 0% silences them without turning the chimes off.</span></span>
-        <span class="row" style="gap:8px"><input type="range" id="sound_volume" min="0" max="100" step="5"><span id="soundVolumeVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">100%</span></span>
-      </div>
-      <div class="grid2" style="margin-top:6px">
-        <div class="num"><span>Max recording<span class="sub">Seconds before a take auto-stops</span></span><input type="number" id="max_seconds" min="5" max="1800"></div>
-        <div class="num"><span>Tap lock<span class="sub">Presses shorter than this (ms) go hands-free</span></span><input type="number" id="tap_lock_ms" min="50" max="2000"></div>
-        <div class="num"><span>Clipboard restore<span class="sub">Delay in ms; -1 keeps the transcript on the clipboard</span></span><input type="number" id="restore_clipboard_ms" min="-1" max="60000"></div>
-        <div class="num"><span>Start sound<span class="sub">The soft cue when a recording begins. Plays at the volume above.</span></span><button id="testSound" type="button">Play</button></div>
-      </div>
+      <ul id="historyList" class="history"></ul>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="history"><span>Keep history<span class="sub">This list reads ~/.murmur/history.jsonl; switching it off stops the log</span></span></label>
     </div>
   </section>
+  </div>
 
-  <section id="startupSection" style="display:none">
-    <span class="kicker">Startup</span>
-    <div class="panel">
-      <label class="check"><input type="checkbox" id="autostart"><span>Open Murmur at login<span class="sub">Starts automatically in the tray, no terminal window. Takes effect right away.</span></span></label>
-      <p id="autostartMac" class="hint" style="display:none">On a Mac, the first launch this way will ask again for Microphone, Input Monitoring, and Accessibility, since the system sees it as a new launcher. Grant them once.</p>
-    </div>
-  </section>
-
+  <div class="tabpanel" id="tab-model" role="tabpanel" aria-label="Model">
   <section>
-    <span class="kicker">Model</span>
+    <span class="kicker">Speech model</span>
     <div class="panel">
       <div class="row">
         <select id="modelSelect" style="flex:1"></select>
@@ -244,17 +321,25 @@
       </div>
     </div>
   </section>
+  </div>
 
-  <section>
-    <span class="kicker">Recent transcripts</span>
+  <div class="tabpanel" id="tab-app" role="tabpanel" aria-label="App">
+  <section id="startupSection" style="display:none">
+    <span class="kicker">Startup</span>
     <div class="panel">
-      <div class="row" style="justify-content:space-between">
-        <span class="hint" style="margin:0">The last few dictations, newest first. Handy for testing dictionary entries.</span>
-        <button id="historyReload" type="button">Refresh</button>
-      </div>
-      <ul id="historyList" class="history"></ul>
+      <label class="check"><input type="checkbox" id="autostart"><span>Open Murmur at login<span class="sub">Starts automatically in the tray, no terminal window. Takes effect right away.</span></span></label>
+      <p id="autostartMac" class="hint" style="display:none">On a Mac, the first launch this way will ask again for Microphone, Input Monitoring, and Accessibility, since the system sees it as a new launcher. Grant them once.</p>
     </div>
   </section>
+  <section>
+    <span class="kicker">Updates</span>
+    <div class="panel">
+      <label class="check"><input type="checkbox" id="update_check"><span>Check for updates<span class="sub">Asks GitHub once a day and shows a banner here when one exists. The only thing Murmur ever sends.</span></span></label>
+      <p class="hint">You are on Murmur <span id="aboutVersion">…</span> ·
+      <a href="https://github.com/nkalodner/murmur#readme" target="_blank" rel="noreferrer">Full manual</a></p>
+    </div>
+  </section>
+  </div>
 </div>
 
 <div class="savebar"><div class="inner">
@@ -339,6 +424,7 @@ function renderStatus(s) {
   if (s.state === "locked") { cls = "recording"; label = "recording"; }
   dot.className = "dot " + cls;
   $("statusText").textContent = label + " · v" + s.version;
+  $("aboutVersion").textContent = "v" + s.version;
   $("offline").style.display = "none";
   renderUpdate(s);
   renderPermissions(s);
@@ -378,10 +464,20 @@ let canDuck = false;
 function renderDuckLevel() {
   $("duckLevelRow").style.display = canDuck && $("duck_audio").checked ? "" : "none";
 }
+function renderSoundLevel() {
+  $("soundLevelRow").style.display = $("sounds").checked ? "" : "none";
+}
 
 function renderVocab() {
   const box = $("vocabChips");
   box.replaceChildren();
+  $("vocabCount").textContent = cfg.vocabulary.length ? "(" + cfg.vocabulary.length + ")" : "";
+  if (!cfg.vocabulary.length) {
+    const none = document.createElement("span");
+    none.className = "empty";
+    none.textContent = "Nothing yet. Add the names and jargon Murmur gets wrong.";
+    box.appendChild(none);
+  }
   cfg.vocabulary.forEach((word, i) => {
     const chip = document.createElement("span");
     chip.className = "chip";
@@ -398,6 +494,13 @@ function renderVocab() {
 function renderPairs() {
   const box = $("pairs");
   box.replaceChildren();
+  $("pairCount").textContent = cfg.replacements.length ? "(" + cfg.replacements.length + ")" : "";
+  if (!cfg.replacements.length) {
+    const none = document.createElement("span");
+    none.className = "empty";
+    none.textContent = "Nothing yet. Add a fix for a phrase the model mishears the same way every time.";
+    box.appendChild(none);
+  }
   cfg.replacements.forEach((pair, i) => {
     const row = document.createElement("div");
     row.className = "pair";
@@ -477,6 +580,14 @@ function renderAll(state) {
   canDuck = state.platform === "darwin" || state.platform === "win32";
   $("duckRow").style.display = canDuck ? "" : "none";
   renderDuckLevel();
+  renderSoundLevel();
+  // The pill is a Windows/Linux overlay; on macOS the menu-bar dot is the
+  // recording indicator, so the toggle would do nothing there.
+  const noPill = state.platform === "darwin";
+  $("pill").disabled = noPill;
+  $("pillSub").textContent = noPill
+    ? "Windows and Linux only. On a Mac the menu bar dot shows recording."
+    : "Floating overlay with live level bars while you talk (Windows, Linux)";
   renderModelPicker();
   $("language").value = cfg.language || "";
   $("quantization").value = cfg.quantization || "";
@@ -598,7 +709,9 @@ $("reloadDevices").addEventListener("click", async () => {
 function addVocab() {
   const v = $("vocabInput").value.trim();
   if (!v) return;
-  if (!cfg.vocabulary.some((x) => x.toLowerCase() === v.toLowerCase())) {
+  if (cfg.vocabulary.some((x) => x.toLowerCase() === v.toLowerCase())) {
+    msg('"' + v + '" is already in the vocabulary.', "");
+  } else {
     cfg.vocabulary.push(v);
     renderVocab(); setDirty(true);
   }
@@ -618,6 +731,7 @@ $("pairAdd").addEventListener("click", () => {
 for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "duck_audio", "remove_fillers", "update_check"])
   $(id).addEventListener("change", () => { cfg[id] = $(id).checked; setDirty(true); });
 $("duck_audio").addEventListener("change", renderDuckLevel);
+$("sounds").addEventListener("change", renderSoundLevel);
 $("duck_percent").addEventListener("input", () => {
   cfg.duck_percent = parseInt($("duck_percent").value, 10);
   $("duckPercentVal").textContent = cfg.duck_percent + "%";
@@ -687,36 +801,56 @@ $("testSound").addEventListener("click", () => {
   fetch("/api/test-sound", { method: "POST", headers: HEADERS, body: JSON.stringify({ cue: "start", volume: cfg.sound_volume }) }).catch(() => renderOffline());
 });
 
+// The bar reads in dBFS (-60..0 mapped to 0..100%), the scale ears actually
+// work on, and its zone boundaries are the SAME peak thresholds the server's
+// verdict uses (0.012 -> 36%, 0.06 -> 59%), so the fill always lands in the
+// zone the words describe.
+function micPct(peak) {
+  const db = 20 * Math.log10(Math.max(peak, 0.0005));
+  return Math.max(2, Math.min(100, Math.round(((db + 60) / 60) * 100)));
+}
+function deviceLabel() {
+  const sel = $("device");
+  return sel.selectedOptions.length ? sel.selectedOptions[0].textContent : "system default";
+}
 $("testMic").addEventListener("click", async () => {
   const btn = $("testMic");
-  const label = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Listening…";
   $("micResult").style.display = "block";
-  $("micMsg").textContent = "Recording about a second. Say a few words.";
-  $("meterFill").style.width = "0%";
+  $("micDone").style.display = "none";
+  $("micMsg").textContent = "Say a few words at a normal volume.";
   $("meterFill").className = "meterfill";
+  $("meterFill").style.width = "0%";
+  $("micMeter").classList.add("listening");
   try {
     const res = await fetch("/api/test-mic", {
       method: "POST", headers: HEADERS,
       body: JSON.stringify({ device: $("device").value || null }),
     });
     const out = await res.json();
+    $("micMeter").classList.remove("listening");
+    $("micDone").style.display = "block";
     if (!res.ok) {
+      $("micDone").className = "micdone err";
+      $("micDone").textContent = "Test failed";
       $("meterFill").className = "meterfill silent";
-      $("meterFill").style.width = "3%";
+      $("meterFill").style.width = "2%";
       $("micMsg").textContent = out.error || "Mic test failed.";
     } else {
       const cls = out.peak >= 0.06 ? "loud" : out.peak >= 0.012 ? "faint" : "silent";
+      $("micDone").className = "micdone" + (cls === "silent" ? " err" : "");
+      $("micDone").textContent = "Test complete · " + deviceLabel();
       $("meterFill").className = "meterfill " + cls;
-      // Perceptual (square-root) scale: speech peaks sit around 0.1-0.4, so a
-      // linear bar would look near-empty even when the level is fine.
-      const pct = Math.round(Math.sqrt(Math.max(0, out.peak)) * 125);
-      $("meterFill").style.width = Math.max(3, Math.min(100, pct)) + "%";
+      $("meterFill").style.width = micPct(out.peak) + "%";
       $("micMsg").textContent = out.message;
     }
-  } catch { renderOffline(); $("micMsg").textContent = "Murmur is not reachable."; }
-  finally { btn.disabled = false; btn.textContent = label; }
+  } catch {
+    $("micMeter").classList.remove("listening");
+    renderOffline();
+    $("micMsg").textContent = "Murmur is not reachable.";
+  }
+  finally { btn.disabled = false; btn.textContent = "Test again"; }
 });
 
 $("autostart").addEventListener("change", async () => {
@@ -777,8 +911,48 @@ $("historyReload").addEventListener("click", loadHistory);
 
 window.addEventListener("beforeunload", (e) => { if (dirty) e.preventDefault(); });
 
+// ---- tabs -----------------------------------------------------------------
+// The active tab rides in location.hash (#dictionary), so a refresh or a
+// shared link lands on the same view. Recent transcripts load lazily the
+// first time the Dictionary tab opens, and refresh on every return to it.
+const TABS = ["hotkeys", "recording", "typing", "sounds", "dictionary", "model", "app"];
+function activateTab(name, setHash = true) {
+  if (!TABS.includes(name)) name = TABS[0];
+  for (const t of TABS) {
+    const on = t === name;
+    const btn = document.querySelector('.tab[data-tab="' + t + '"]');
+    btn.setAttribute("aria-selected", on ? "true" : "false");
+    btn.tabIndex = on ? 0 : -1;
+    $("tab-" + t).classList.toggle("active", on);
+  }
+  if (setHash) history.replaceState(null, "", "#" + name);
+  if (name === "dictionary") loadHistory();
+}
+$("tabs").addEventListener("click", (e) => {
+  const btn = e.target.closest(".tab");
+  if (btn) activateTab(btn.dataset.tab);
+});
+$("tabs").addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  e.preventDefault();
+  const current = TABS.indexOf((location.hash || "#").slice(1)) >= 0
+    ? TABS.indexOf(location.hash.slice(1)) : 0;
+  const next = (current + (e.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length;
+  activateTab(TABS[next]);
+  document.querySelector('.tab[data-tab="' + TABS[next] + '"]').focus();
+});
+window.addEventListener("hashchange", () => activateTab(location.hash.slice(1), false));
+
+// Cmd/Ctrl+S saves from anywhere on the page (unless a key capture is live).
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && !capturing) {
+    e.preventDefault();
+    if (dirty) $("save").click();
+  }
+});
+
+activateTab((location.hash || "#").slice(1) || "hotkeys", false);
 loadState();
-loadHistory();
 setInterval(pollStatus, 5000);
 </script>
 </body>

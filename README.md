@@ -61,11 +61,16 @@ Notes:
 
 Nothing you say, ever. Transcription is entirely local, and there is no telemetry or analytics of any kind.
 
-The one exception is the update check: once a day Murmur fetches a version number from this repo so it can tell you when a newer release exists. It is a plain download that sends no transcript, no settings, and nothing identifying you. Turn it off with **Check for updates** under Behavior, or `"update_check": false` in the config, and Murmur makes no network requests at all after the model has downloaded.
+The one exception is the update check: once a day Murmur fetches a version number from this repo so it can tell you when a newer release exists. It is a plain download that sends no transcript, no settings, and nothing identifying you. Turn it off with **Check for updates** on the App tab, or `"update_check": false` in the config, and Murmur makes no network requests at all after the model has downloaded.
 
 ## What's new
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
+
+### 0.9.2
+
+- **The settings page became tabs.** Seven of them (Hotkeys, Recording, Typing, Sounds, Dictionary, Model, App) instead of one long scroll, with the address bar remembering which tab you are on. The old Behavior grab-bag is gone: recording things live with the mic, typing things live together, sounds live with sounds. Recent transcripts moved next to the dictionary they exist to test, the chime volume slider got its Play button on the same row, and Export and Import got proper icons.
+- **The mic test reads like a result now.** The meter is zoned (red silent, amber faint, green good) on a decibel scale, so the bar always lands in the zone the verdict describes, a sweep animation shows while it listens, and a "Test complete" line names the device it heard. Cmd/Ctrl+S saves from anywhere on the page, the vocabulary and replacement lists show counts and say something useful when empty, and on a Mac the recording-pill toggle now explains itself instead of silently doing nothing.
 
 ### 0.9.1
 
@@ -132,22 +137,17 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 
 ## Settings
 
-`murmur --settings` opens the settings page, starting Murmur first if it needs to. It is also in the tray menu, and double-clicking the tray icon opens it on Windows. The page is served by Murmur itself on `127.0.0.1` only; nothing leaves your machine. Changes apply immediately, including the hotkey, and persist to `~/.murmur/config.json`.
+`murmur --settings` opens the settings page, starting Murmur first if it needs to. It is also in the tray menu, and double-clicking the tray icon opens it on Windows. The page is served by Murmur itself on `127.0.0.1` only; nothing leaves your machine. Changes apply immediately, including the hotkey, and persist to `~/.murmur/config.json`. Since 0.9.2 the page is organized as seven tabs instead of one long scroll:
 
 - **Hotkeys**: two independent bindings, and either one starts dictation. Each can be a single key or two or three held together (`cmd+shift`); press the combination while changing to record it. Esc stays reserved for canceling a recording.
   - **Either one can be switched off**, so long as one is left. Want only a two-key combination and no bare key? Switch the first one off. Murmur refuses to leave you with both off, since there would be no way to dictate.
   - The two cannot overlap: if one is contained in the other (`ctrl_r` and `ctrl_r+space`), the shorter one always fires first, so Murmur rejects that pair instead of leaving you with a hotkey that never works.
-- **Microphone**: pick a specific input, or leave it on the system default. Test mic records about a second and shows the level, so you can confirm it hears you before saving.
-- **Dictionary**: see below.
-- **Behavior**: chimes, paste versus type, trailing space, history, the recording pill, max recording length, tap-lock window, clipboard restore delay. The start-recording cue is a soft low tone; the Play button next to it previews it, and **Chime volume** sets how loud every cue is (0% is silent). Murmur mutes the mic for exactly the length of the start cue, so the chime can never be recorded and transcribed as "mm".
-- **Recording pill**: a small always-on-top overlay near the bottom of the screen while you talk, just a status dot and bars that move to your voice, no text (Windows and Linux; macOS shows the tray dot instead, since Tk can't share the menu-bar thread). Toggle it under Behavior.
-- **Quiet other audio**: turns the system volume down while you talk and puts it back at the exact level afterward, so dictating over a video does not fight the speaker. Off by default; macOS and Windows only. The slider sets how far down it goes (20% by default). If your volume is already lower than that, Murmur leaves it alone.
-- **Drop filler words**: "um" and "uh" are removed before the text is typed. Only sounds that are never real words are on the list, so ordinary speech is untouched; `filler_words` in the config file takes additions if you want more removed.
-- **Check for updates**: asks GitHub once a day whether a newer Murmur exists and shows a banner when there is one. The only network request Murmur makes after setup, and it sends nothing about you. Turn it off here if you would rather it never reached out.
-- **Auto-format speech**: spoken times, dates, numbers, and spelled-out acronyms come out written. "one pm" types as `1:00 PM`, "four thirty" as `4:30`, "july third" as `July 3rd`, "twenty twenty six" as `2026`, "fifty percent" as `50%`, "twenty dollars" as `$20`, and letters said one at a time join up, so "W S A" types as `WSA`. The grammar the model itself writes is trusted: "which one am I" is never mangled, "A, B, or C" keeps its commas, and counting runs like "eighteen nineteen twenty" stay as spoken. Toggle under Behavior.
+- **Recording**: pick a microphone or leave it on the system default, and Test mic listens for about a second and shows where your voice lands on a zoned meter (red silent, amber faint, green good), with a clear "Test complete" line naming the device it heard. The same tab holds the recording pill (a small always-on-top overlay with bars that move to your voice; Windows and Linux, since macOS shows the menu-bar dot instead), the max recording length, and the tap-lock window.
+- **Typing**: everything about what lands at your cursor. **Auto-format speech**: spoken times, dates, numbers, and spelled-out acronyms come out written, so "one pm" types as `1:00 PM`, "four thirty" as `4:30`, "twenty twenty six" as `2026`, "fifty percent" as `50%`, and letters said one at a time join up, "W S A" as `WSA`; grammar the model itself writes is trusted, so "which one am I" is never mangled and "A, B, or C" keeps its commas. **Drop filler words**: "um" and "uh" never get typed, and only sounds that are never real words are on the list (`filler_words` in the config takes additions). Plus trailing space, paste versus type-it-out, and the clipboard restore delay.
+- **Sounds**: chimes on or off, with **Chime volume** and its Play preview on the same row (0% is silent without switching chimes off). Murmur mutes the mic for exactly the length of the start cue, so the chime can never be recorded and transcribed as "mm". **Quiet other audio** turns the system volume down while you talk and puts it back at the exact level afterward (off by default; macOS and Windows; the slider sets how far down).
+- **Dictionary**: see below. Recent transcripts sit on the same tab, newest first, so testing an entry is dictate, refresh, check, and the keep-history toggle is right beside the list it feeds.
 - **Model**: pick from the menu (Parakeet v2/v3, Whisper base, Canary 1B v2) or enter any onnx-asr name / Hugging Face repo id via Custom, plus precision and a language code for the models that read one. A new model downloads on first use and loads on the next dictation. See [Choosing a model](#choosing-a-model).
-- **Startup**: Open Murmur at login (Windows and macOS). See [below](#do-i-need-to-keep-the-terminal-open-start-at-login).
-- **Recent transcripts**: the last few dictations, newest first, for testing dictionary entries.
+- **App**: Open Murmur at login (Windows and macOS; see [below](#do-i-need-to-keep-the-terminal-open-start-at-login)) and the daily update check, which is the only network request Murmur makes and sends nothing about you.
 
 ### The dictionary
 
