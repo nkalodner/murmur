@@ -80,6 +80,8 @@
     background:color-mix(in srgb,var(--accent) 12%,var(--card));padding:12px 14px;font-size:14px;color:var(--fg)}
   .update code{font-family:var(--mono);font-size:12.5px;background:var(--field);padding:2px 5px;border-radius:2px;
     display:inline-block;margin-top:6px;overflow-wrap:anywhere}
+  .perm{display:none;margin-top:14px;border:1px solid var(--busy);
+    background:color-mix(in srgb,var(--busy) 12%,var(--card));padding:12px 14px;font-size:14px;color:var(--fg)}
   .offline{display:none;margin-top:14px;border:1px solid var(--danger);background:color-mix(in srgb,var(--danger) 12%,var(--card));padding:12px 14px;font-size:14px;color:var(--fg)}
   .meter{height:10px;background:var(--field);border:1px solid var(--border);border-radius:2px;overflow:hidden}
   .meterfill{height:100%;width:0;background:var(--accent);transition:width .15s ease}
@@ -102,6 +104,7 @@
     Quit Murmur, then run:
     <code>uv tool install --reinstall https://github.com/nkalodner/murmur/archive/refs/heads/main.zip</code>
   </div>
+  <div id="permBanner" class="perm"><b id="permTitle"></b> <span id="permBody"></span></div>
 
   <section>
     <span class="kicker">Hotkey</span>
@@ -191,7 +194,7 @@
         <label class="check"><input type="checkbox" id="trailing_space"><span>Trailing space<span class="sub">So back-to-back dictations flow</span></span></label>
         <label class="check"><input type="checkbox" id="history"><span>Keep history<span class="sub">Transcripts saved to ~/.murmur/history.jsonl</span></span></label>
         <label class="check"><input type="checkbox" id="pill"><span>Recording pill<span class="sub">Floating overlay while recording (Windows, Linux)</span></span></label>
-        <label class="check"><input type="checkbox" id="formatting"><span>Auto-format speech<span class="sub">"one pm" types as 1:00 PM; dates, percents, dollars too</span></span></label>
+        <label class="check"><input type="checkbox" id="formatting"><span>Auto-format speech<span class="sub">"four thirty" types as 4:30, "W S A" as WSA; dates, years, percents too</span></span></label>
         <label class="check" id="duckRow"><input type="checkbox" id="duck_audio"><span>Quiet other audio<span class="sub">Turns the volume down while you talk, back up after</span></span></label>
         <label class="check"><input type="checkbox" id="remove_fillers"><span>Drop filler words<span class="sub">"um" and "uh" never get typed. Edit the list in config.json</span></span></label>
         <label class="check"><input type="checkbox" id="update_check"><span>Check for updates<span class="sub">Asks GitHub once a day. The only thing Murmur ever sends</span></span></label>
@@ -299,6 +302,32 @@ function renderUpdate(s) {
   $("updateChangelog").href = u.changelog || "#";
 }
 
+// One readiness problem at a time, worst first: a dead hotkey beats a blocked
+// paste, and "granted, now restart" is the step people otherwise never learn.
+// The 5s status poll keeps this live, so the banner flips the moment a toggle
+// does in System Settings.
+function renderPermissions(s) {
+  const p = s.permissions || {};
+  let title = "", body = "";
+  if (p.relevant && p.input_monitoring === false) {
+    title = "The hotkey cannot work yet.";
+    body = 'macOS Input Monitoring is off for the app running Murmur. System Settings > ' +
+      'Privacy & Security > Input Monitoring > turn on your terminal (or "Python"). ' +
+      "This page notices the moment it is granted.";
+  } else if (p.relevant && p.restart_needed) {
+    title = "Input Monitoring is granted. One more step:";
+    body = "quit Murmur (menu bar icon > Quit) and start it again. " +
+      "The hotkey only attaches at launch, so this copy cannot see it yet.";
+  } else if (p.relevant && p.accessibility === false) {
+    title = "Murmur can hear the hotkey but cannot paste.";
+    body = 'macOS Accessibility is off. System Settings > Privacy & Security > ' +
+      'Accessibility > turn on your terminal (or "Python"). Pasting works the ' +
+      "moment it is granted; no restart needed.";
+  }
+  $("permBanner").style.display = title ? "block" : "none";
+  if (title) { $("permTitle").textContent = title; $("permBody").textContent = " " + body; }
+}
+
 function renderStatus(s) {
   const dot = $("dot");
   let cls = s.state, label = s.state;
@@ -308,6 +337,7 @@ function renderStatus(s) {
   $("statusText").textContent = label + " · v" + s.version;
   $("offline").style.display = "none";
   renderUpdate(s);
+  renderPermissions(s);
 }
 function renderOffline() {
   $("dot").className = "dot off";
