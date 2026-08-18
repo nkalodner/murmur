@@ -27,14 +27,20 @@
   .dot.idle{background:hsl(38 12% 59%)} .dot.recording{background:var(--rec)}
   .dot.busy{background:var(--busy)} .dot.loading{background:transparent;border:2px solid var(--faint);width:7px;height:7px}
   .dot.off{background:transparent;border:2px solid var(--danger);width:7px;height:7px}
-  section{margin-top:26px}
+  section{margin-top:22px}
   section>.kicker{display:block;margin-bottom:8px}
-  .panel{background:var(--card);border:1px solid var(--border);padding:16px}
+  .panel{background:var(--card);border:1px solid var(--border);padding:6px 16px}
+  .panel>.hint:first-child,.panel>.row:first-child{margin-top:10px}
+  .panel>.hint:last-child,.panel>.row:last-child,.panel>.chips:last-child,.panel>.pairs:last-child{margin-bottom:10px}
   .hint{font-size:13px;color:var(--muted);margin-top:8px}
   .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  label.check{display:flex;align-items:center;gap:9px;padding:7px 0;cursor:pointer;color:var(--body)}
-  label.check .sub{display:block;font-size:12.5px;color:var(--muted)}
-  input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent)}
+  .setting{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 0;
+    border-bottom:1px solid var(--border)}
+  .setting:last-child{border-bottom:none}
+  .setting>span:first-child{color:var(--fg);font-size:14.5px}
+  .setting .sub{display:block;font-size:12.5px;color:var(--muted);margin-top:1px}
+  label.check{cursor:pointer}
+  input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);flex:none}
   input[type=text],input[type=number],select{
     background:var(--field);border:1px solid var(--border);color:var(--fg);
     border-radius:2px;padding:7px 10px;font:inherit;font-size:14px;min-width:0}
@@ -61,11 +67,8 @@
   .pairs{display:flex;flex-direction:column;gap:8px;margin-top:10px}
   .pair{display:grid;grid-template-columns:1fr auto 1fr auto;align-items:center;gap:8px}
   .pair .arrow{color:var(--faint);font-family:var(--mono)}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px}
-  @media (max-width:560px){.grid2{grid-template-columns:1fr}.pair{grid-template-columns:1fr auto 1fr auto}}
-  .num{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0}
-  .num span .sub{display:block;font-size:12.5px;color:var(--muted)}
-  .num input{width:96px;text-align:right}
+  @media (max-width:560px){.pair{grid-template-columns:1fr auto 1fr auto}}
+  .setting input[type=number]{width:96px;text-align:right}
   .history{list-style:none;display:flex;flex-direction:column;gap:0;margin-top:2px}
   .history li{border-bottom:1px solid var(--border);padding:8px 2px;display:flex;gap:12px;align-items:baseline}
   .history li:last-child{border-bottom:none}
@@ -146,10 +149,8 @@
   <section>
     <span class="kicker">Hotkeys</span>
     <div class="panel">
-      <p class="hint" style="margin-top:0">Two independent hotkeys. Either can be a single key or two or three held
-      together, and either can be switched off, as long as one is left. Hold one to dictate; a quick tap locks
-      hands-free. While changing, press the key you want, or press the combination together to record it.
-      Esc stays reserved for canceling a recording.</p>
+      <p class="hint" style="margin-top:10px">Hold to dictate; a quick tap locks hands-free; Esc cancels.
+      Two independent keys, and either can be a combination held together.</p>
 
       <div class="kicker" style="letter-spacing:.12em;margin-top:18px">First hotkey</div>
       <div class="row" style="margin-top:8px">
@@ -164,9 +165,8 @@
         <button id="captureBtn2" type="button">Set second</button>
         <button id="clearKey2" type="button" class="ghost">Switch off</button>
       </div>
-      <p class="hint">Bare keys like right Ctrl, right Alt, or F8 work best on their own; a letter key would still
-      type that letter everywhere, so pair it with a modifier. The two cannot overlap: with ctrl_r and
-      ctrl_r+space, the shorter one always fires first.</p>
+      <p class="hint">Bare modifiers like right Ctrl work best; a letter key would still type.
+      The two keys cannot contain each other.</p>
     </div>
   </section>
   </div>
@@ -185,18 +185,15 @@
         <span id="micDone" class="micdone" style="display:none"></span>
         <p id="micMsg" class="hint" style="margin-top:6px"></p>
       </div>
-      <p class="hint">Applies to the next recording. Test mic listens for about a second and shows where your
-      voice lands: red is silent, amber is faint, green is good.</p>
+      <p class="hint">Applies to the next recording. Test mic listens for a second and meters your voice.</p>
     </div>
   </section>
   <section>
     <span class="kicker">During a take</span>
     <div class="panel">
-      <label class="check"><input type="checkbox" id="pill"><span>Recording pill<span class="sub" id="pillSub">Floating overlay with live level bars while you talk (Windows, Linux)</span></span></label>
-      <div class="grid2" style="margin-top:6px">
-        <div class="num"><span>Max recording<span class="sub">Seconds before a take auto-stops</span></span><input type="number" id="max_seconds" min="5" max="1800"></div>
-        <div class="num"><span>Tap lock<span class="sub">Presses shorter than this (ms) go hands-free</span></span><input type="number" id="tap_lock_ms" min="50" max="2000"></div>
-      </div>
+      <label class="check setting"><span>Recording pill<span class="sub" id="pillSub">Floating level bars while you talk (Windows, Linux)</span></span><input type="checkbox" id="pill"></label>
+      <div class="setting"><span>Max recording<span class="sub">Auto-stop, in seconds</span></span><input type="number" id="max_seconds" min="5" max="1800"></div>
+      <div class="setting"><span>Tap lock<span class="sub">Shorter presses (ms) lock hands-free</span></span><input type="number" id="tap_lock_ms" min="50" max="2000"></div>
     </div>
   </section>
   </div>
@@ -205,16 +202,16 @@
   <section>
     <span class="kicker">What gets typed</span>
     <div class="panel">
-      <label class="check"><input type="checkbox" id="formatting"><span>Auto-format speech<span class="sub">"four thirty" types as 4:30, "W S A" as WSA; dates, years, percents too</span></span></label>
-      <label class="check"><input type="checkbox" id="remove_fillers"><span>Drop filler words<span class="sub">"um" and "uh" never get typed. Edit the list in config.json</span></span></label>
-      <label class="check"><input type="checkbox" id="trailing_space"><span>Trailing space<span class="sub">So back-to-back dictations flow</span></span></label>
+      <label class="check setting"><span>Auto-format speech<span class="sub">Spoken times, dates, numbers, and acronyms come out written</span></span><input type="checkbox" id="formatting"></label>
+      <label class="check setting"><span>Drop filler words<span class="sub">"um" and "uh" are never typed</span></span><input type="checkbox" id="remove_fillers"></label>
+      <label class="check setting"><span>Trailing space<span class="sub">Consecutive dictations flow together</span></span><input type="checkbox" id="trailing_space"></label>
     </div>
   </section>
   <section>
     <span class="kicker">How it lands</span>
     <div class="panel">
-      <label class="check"><input type="checkbox" id="paste"><span>Paste into apps<span class="sub">Off types character by character instead, for apps that reject the paste</span></span></label>
-      <div class="num"><span>Clipboard restore<span class="sub">Delay in ms before your old clipboard comes back; -1 keeps the transcript on it</span></span><input type="number" id="restore_clipboard_ms" min="-1" max="60000"></div>
+      <label class="check setting"><span>Paste into apps<span class="sub">Off types character by character instead</span></span><input type="checkbox" id="paste"></label>
+      <div class="setting"><span>Clipboard restore<span class="sub">Delay in ms; -1 keeps the transcript on the clipboard</span></span><input type="number" id="restore_clipboard_ms" min="-1" max="60000"></div>
     </div>
   </section>
   </div>
@@ -223,9 +220,9 @@
   <section>
     <span class="kicker">Chimes</span>
     <div class="panel">
-      <label class="check"><input type="checkbox" id="sounds"><span>Chimes<span class="sub">Short cues on start, stop, cancel, ready</span></span></label>
-      <div class="num" id="soundLevelRow">
-        <span>Chime volume<span class="sub">0% is silent without switching chimes off</span></span>
+      <label class="check setting"><span>Chimes<span class="sub">Cues on start, stop, cancel, ready</span></span><input type="checkbox" id="sounds"></label>
+      <div class="setting" id="soundLevelRow">
+        <span>Chime volume<span class="sub">0% is silent</span></span>
         <span class="row" style="gap:8px">
           <input type="range" id="sound_volume" min="0" max="100" step="5">
           <span id="soundVolumeVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">100%</span>
@@ -237,9 +234,9 @@
   <section>
     <span class="kicker">Other audio</span>
     <div class="panel">
-      <label class="check" id="duckRow"><input type="checkbox" id="duck_audio"><span>Quiet other audio<span class="sub">Turns the volume down while you talk, back up after</span></span></label>
-      <div class="num" id="duckLevelRow" style="display:none">
-        <span>Quiet to<span class="sub">How far down other audio goes while recording. Left is quieter.</span></span>
+      <label class="check setting" id="duckRow"><span>Quiet other audio<span class="sub">Lowers other audio while you talk, restores it after</span></span><input type="checkbox" id="duck_audio"></label>
+      <div class="setting" id="duckLevelRow" style="display:none">
+        <span>Quiet to<span class="sub">Output volume while recording</span></span>
         <span class="row" style="gap:8px"><input type="range" id="duck_percent" min="0" max="80" step="5"><span id="duckPercentVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">20%</span></span>
       </div>
     </div>
@@ -250,17 +247,16 @@
   <section>
     <span class="kicker">Vocabulary <span class="count" id="vocabCount"></span></span>
     <div class="panel">
-      <p class="hint" style="margin-top:0">Names and jargon, spelled and cased exactly how they should be typed.
-      Transcripts that come out close snap to your spelling ("pie torch" becomes "PyTorch"). Stick to proper nouns;
-      everyday words would get rewritten too.</p>
+      <p class="hint">Proper nouns and jargon, cased exactly how they should be typed.
+      Close-sounding transcripts snap to your spelling.</p>
       <div class="row" style="margin-top:10px">
         <input type="text" id="vocabInput" placeholder="Add a word or phrase" style="flex:1">
         <button id="vocabAdd" type="button">Add</button>
       </div>
       <div id="vocabChips" class="chips"></div>
 
-      <div class="num" style="margin-top:14px">
-        <span>Match sensitivity<span class="sub">How close a word must sound before it snaps to your vocabulary. Left catches more, right is stricter.</span></span>
+      <div class="setting" style="margin-top:6px">
+        <span>Match sensitivity<span class="sub">Left catches more; right is stricter</span></span>
         <span class="row" style="gap:8px"><input type="range" id="threshold" min="0.70" max="0.95" step="0.01"><span id="thresholdVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">0.82</span></span>
       </div>
     </div>
@@ -268,8 +264,7 @@
   <section>
     <span class="kicker">Replacements <span class="count" id="pairCount"></span></span>
     <div class="panel">
-      <p class="hint" style="margin-top:0">Exact fixes for things the model reliably mishears: whenever the left side
-      shows up in a transcript, the right side is typed instead.</p>
+      <p class="hint">Whenever the left side is heard, the right side is typed.</p>
       <div id="pairs" class="pairs"></div>
       <div class="row" style="margin-top:10px"><button id="pairAdd" type="button">Add replacement</button></div>
     </div>
@@ -277,9 +272,8 @@
   <section>
     <span class="kicker">Move between devices</span>
     <div class="panel">
-      <p class="hint" style="margin-top:0">Export writes every word and replacement to a small file. Import reads
-      that file on another device and folds it in: duplicates are skipped and this device's entries always win, so
-      importing never loses anything.</p>
+      <p class="hint">Export writes a small file; Import folds one in. Merges skip
+      duplicates, and this device's entries always win.</p>
       <div class="row" style="margin-top:10px">
         <button id="dictExport" type="button" class="withicon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v11"/><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/><path d="M4.5 20.5h15"/></svg>Export dictionary</button>
         <button id="dictImport" type="button" class="withicon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M6.5 9.5 12 4l5.5 5.5"/><path d="M4.5 20.5h15"/></svg>Import dictionary</button>
@@ -291,11 +285,11 @@
     <span class="kicker">Recent transcripts</span>
     <div class="panel">
       <div class="row" style="justify-content:space-between">
-        <span class="hint" style="margin:0">The last few dictations, newest first. Dictate, refresh, and check an entry landed.</span>
+        <span class="hint" style="margin:0">Newest first. Dictate, refresh, check an entry landed.</span>
         <button id="historyReload" type="button">Refresh</button>
       </div>
       <ul id="historyList" class="history"></ul>
-      <label class="check" style="margin-top:8px"><input type="checkbox" id="history"><span>Keep history<span class="sub">This list reads ~/.murmur/history.jsonl; switching it off stops the log</span></span></label>
+      <label class="check setting" style="margin-top:4px"><span>Keep history<span class="sub">Saved to ~/.murmur/history.jsonl</span></span><input type="checkbox" id="history"></label>
     </div>
   </section>
   </div>
@@ -315,8 +309,8 @@
         <input type="text" id="modelCustom" placeholder="onnx-asr model name or Hugging Face repo id" style="flex:1">
       </div>
       <p class="hint" id="modelHint"></p>
-      <div class="num" style="margin-top:6px">
-        <span>Language code<span class="sub" id="languageSub">Two letters, like en or de. Whisper and Canary read it; Parakeet ignores it (v3 detects on its own). Blank = auto.</span></span>
+      <div class="setting" style="margin-top:6px">
+        <span>Language code<span class="sub" id="languageSub">Two letters, like en. Whisper and Canary only; blank detects</span></span>
         <input type="text" id="language" placeholder="auto" style="width:90px">
       </div>
     </div>
@@ -327,15 +321,15 @@
   <section id="startupSection" style="display:none">
     <span class="kicker">Startup</span>
     <div class="panel">
-      <label class="check"><input type="checkbox" id="autostart"><span>Open Murmur at login<span class="sub">Starts automatically in the tray, no terminal window. Takes effect right away.</span></span></label>
-      <p id="autostartMac" class="hint" style="display:none">On a Mac, the first launch this way will ask again for Microphone, Input Monitoring, and Accessibility, since the system sees it as a new launcher. Grant them once.</p>
+      <label class="check setting"><span>Open Murmur at login<span class="sub">Runs from the tray, no terminal. Applies right away</span></span><input type="checkbox" id="autostart"></label>
+      <p id="autostartMac" class="hint" style="display:none">The login copy counts as a new launcher, so macOS asks for the three permissions once more. Grant them once.</p>
     </div>
   </section>
   <section>
     <span class="kicker">Updates</span>
     <div class="panel">
-      <label class="check"><input type="checkbox" id="update_check"><span>Check for updates<span class="sub">Asks GitHub once a day and shows a banner here when one exists. The only thing Murmur ever sends.</span></span></label>
-      <p class="hint">You are on Murmur <span id="aboutVersion">…</span> ·
+      <label class="check setting"><span>Check for updates<span class="sub">Asks GitHub once a day. The only thing Murmur ever sends</span></span><input type="checkbox" id="update_check"></label>
+      <p class="hint">Murmur <span id="aboutVersion">…</span> ·
       <a href="https://github.com/nkalodner/murmur#readme" target="_blank" rel="noreferrer">Full manual</a></p>
     </div>
   </section>
@@ -548,11 +542,11 @@ function updateModelHint() {
   const known = models.find((m) => m.name === cfg.model);
   if (known) {
     $("modelHint").textContent =
-      `${known.note} Downloads ${known.download} on first use and loads on your next dictation, so that one will be slow.`;
+      `${known.note} Downloads ${known.download} on first use; loads on the next dictation.`;
   } else {
     $("modelHint").textContent =
-      "Any model this install of onnx-asr can load: a known name, or a Hugging Face repo id like " +
-      "onnx-community/whisper-large-v3-turbo. If a repo has no int8 files, switch quantization to full precision.";
+      "Any onnx-asr name or Hugging Face repo id. If a repo has no int8 files, " +
+      "switch to full precision.";
   }
   // Parakeet ignores the language code, so only light the field up where
   // it does something (custom models might, so leave it open there).
@@ -586,8 +580,8 @@ function renderAll(state) {
   const noPill = state.platform === "darwin";
   $("pill").disabled = noPill;
   $("pillSub").textContent = noPill
-    ? "Windows and Linux only. On a Mac the menu bar dot shows recording."
-    : "Floating overlay with live level bars while you talk (Windows, Linux)";
+    ? "Windows and Linux only; the menu bar dot covers macOS"
+    : "Floating level bars while you talk (Windows, Linux)";
   renderModelPicker();
   $("language").value = cfg.language || "";
   $("quantization").value = cfg.quantization || "";

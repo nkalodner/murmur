@@ -67,6 +67,10 @@ The one exception is the update check: once a day Murmur fetches a version numbe
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
+### 0.10.1
+
+- **The settings page got quieter.** Roughly half the words: every setting is one hairline row with its name on the left and its control on the right, toggles included, and each description was cut to the fact you need to decide.
+
 ### 0.10.0
 
 - **The settings page became tabs.** Seven of them (Hotkeys, Recording, Typing, Sounds, Dictionary, Model, App) instead of one long scroll, with the address bar remembering which tab you are on. The old Behavior grab-bag is gone: recording things live with the mic, typing things live together, sounds live with sounds. Recent transcripts moved next to the dictionary they exist to test, the chime volume slider got its Play button on the same row, and Export and Import got proper icons.
