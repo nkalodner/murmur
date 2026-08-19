@@ -37,9 +37,8 @@ QUALTRICS = Pack(
     description="Product names, XM jargon, and the acronyms product managers say all day.",
     vocabulary=(
         # Qualtrics products
-        "Qualtrics", "CoreXM", "CustomerXM", "EmployeeXM", "BrandXM", "DesignXM",
-        "XM Discover", "XM Directory", "Stats iQ", "Text iQ", "Driver iQ",
-        "Predict iQ", "CrossXM",
+        "Qualtrics", "CoreXM", "CustomerXM", "EmployeeXM", "BrandXM", "CrossXM",
+        "XM Discover", "XM Directory", "Stats iQ", "Text iQ",
         # Platform features, named the way the support site titles them. All
         # multi-word on purpose: the single-word ones ("dashboard", "quota",
         # "distribution", "widget", "ticket", "branch") are ordinary English
@@ -78,14 +77,11 @@ QUALTRICS = Pack(
         ("customer x m", "CustomerXM"),
         ("employee x m", "EmployeeXM"),
         ("brand x m", "BrandXM"),
-        ("design x m", "DesignXM"),
         ("cross x m", "CrossXM"),
         ("x m discover", "XM Discover"),
         ("x m directory", "XM Directory"),
         ("stats i q", "Stats iQ"),
         ("text i q", "Text iQ"),
-        ("driver i q", "Driver iQ"),
-        ("predict i q", "Predict iQ"),
         # Measures said aloud
         ("see sat", "CSAT"),
         ("sea sat", "CSAT"),
