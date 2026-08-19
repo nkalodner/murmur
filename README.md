@@ -11,9 +11,32 @@ I develop Murmur inside my personal site's monorepo, and every change is auto-pu
 - Hold the key and speak. Release, and Murmur transcribes on the machine and pastes the text into whatever app has focus.
 - Quick-tap the key instead to record hands-free, then tap again to finish. Esc cancels a recording.
 - Transcription runs on your CPU, by default with the int8 ONNX build of `parakeet-tdt-0.6b-v2`; Whisper, Canary, and other models are one settings change away (see [Choosing a model](#choosing-a-model)). A ten second sentence takes about a second on a modern laptop with the default, punctuation and capitalization included.
-- A local settings page (tray menu, or `murmur --settings`) handles the hotkey, the mic, a personal dictionary, and everything else. See [Settings](#settings).
+- A local settings page (tray menu, or `murmur --settings`) handles the hotkey, the mic, a personal dictionary, and everything else. It opens by itself the first time you run Murmur. See [Settings](#settings).
+- Switch on a **word pack** and Murmur knows a whole domain's names at once, without typing them out. See [Word packs](#word-packs).
 
 ## Install
+
+One line, either platform. It installs [uv](https://docs.astral.sh/uv/) if you
+do not have it, installs Murmur, and tells you what to do next. Give it a few
+minutes the first time.
+
+On macOS or Linux:
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/nkalodner/murmur/main/install.sh | sh
+```
+
+On Windows (PowerShell):
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/nkalodner/murmur/main/install.ps1 | iex"
+```
+
+Then open a **new** terminal window and run `murmur`. The settings page opens
+by itself on the first launch.
+
+<details>
+<summary><b>Or install it step by step</b></summary>
 
 You need [uv](https://docs.astral.sh/uv/), which installs and manages Python for you, and git.
 
@@ -39,10 +62,12 @@ uv tool install ./murmur
 murmur
 ```
 
+</details>
+
 Notes:
 
 - If `murmur` is not found after install, run `uv tool update-shell` and open a fresh terminal.
-- To update later: quit Murmur first so its files are not locked, then `git -C murmur pull` and `uv tool install --reinstall ./murmur`. Relaunch when it finishes. [What's new](#whats-new) lists what changed in each version; if the reinstall errors out, see [Troubleshooting](#troubleshooting).
+- **To update: `murmur --update`.** Quit Murmur first, since a running copy holds its own files open; the command says so rather than failing halfway if you forget. [What's new](#whats-new) lists what changed in each version; if it errors out, see [Troubleshooting](#troubleshooting).
 - To remove: `uv tool uninstall murmur-dictation`, then delete `~/.murmur` and the model in `~/.cache/huggingface`.
 
 ### First run
@@ -63,9 +88,52 @@ Nothing you say, ever. Transcription is entirely local, and there is no telemetr
 
 The one exception is the update check: once a day Murmur fetches a version number from this repo so it can tell you when a newer release exists. It is a plain download that sends no transcript, no settings, and nothing identifying you. Turn it off with **Check for updates** on the App tab, or `"update_check": false` in the config, and Murmur makes no network requests at all after the model has downloaded.
 
+### For whoever asks about it at work
+
+The short version to forward: **Murmur is a local program with no account, no server, and no telemetry.** Your speech is transcribed by a model file on your own disk and never leaves the machine. It talks to the network exactly three times: downloading the model once from Hugging Face, the daily version check above (one toggle away from off), and whenever you run `murmur --update`. The whole thing is MIT-licensed and readable at [this repo](https://github.com/nkalodner/murmur).
+
+Two things worth knowing before you install it on a managed laptop:
+
+- **On macOS, the permissions are granted to your terminal, not to Murmur.** Murmur runs as a Python program inside Terminal or iTerm, so that is the app macOS asks you to approve for Input Monitoring and Accessibility. Approving it grants those capabilities to anything else you run from that terminal too. That is how any terminal-launched tool works, and it is worth saying out loud rather than letting someone discover it in System Settings.
+- **The settings page is served on `127.0.0.1` only**, on a port in the 8766-8775 range, and it is reachable only from your own machine.
+
+If your organization blocks the download, see [Behind a corporate network](#behind-a-corporate-network).
+
+### Behind a corporate network
+
+The one thing Murmur has to fetch is the model, which comes from Hugging Face. If that is blocked or proxied, standard environment variables get you through:
+
+- **A proxy**: set `HTTPS_PROXY` (and `HTTP_PROXY`) before running `murmur --download`. Both uv and the model download honor them.
+- **An internal mirror**: set `HF_ENDPOINT` to it, and the download goes there instead of `huggingface.co`.
+- **Neither available**: copy the model from a machine that could reach it. It lives in `~/.cache/huggingface` (`%USERPROFILE%\.cache\huggingface` on Windows). Copy that folder across and Murmur finds it, no download needed. `HF_HOME` moves the cache somewhere else if you would rather it not sit in your profile.
+
+Nothing above changes what Murmur sends. It only changes where the one-time model download comes from.
+
+### Dictating during a meeting
+
+Taking notes while someone talks is the case Murmur is best at, and it works: macOS and Windows both let more than one program open the same microphone, so Murmur can record while Zoom, Teams, or Meet has the mic. Mute yourself in the call, hold the key, and talk into your notes.
+
+Two things to set up first, both on the Sounds tab. Turn **Chimes** down or off, since anything Murmur plays goes out of your speakers and into the call if you are not on headphones. And if you *are* on headphones, turn off **Keep the chime out of the take**, which buys back the fraction of a second it mutes at the start of each take (the cue cannot reach your mic through headphones anyway).
+
+The exception is a conferencing app configured for exclusive microphone access, which is rare and not the default anywhere. If Murmur records silence while you are in a call, that is what to look at.
+
 ## What's new
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
+
+### 0.12.0
+
+- **Auto-format stopped turning quantities into clock times.** "two thirty minute demos" was typing as `2:30 minute demos`, and "version three twenty" as `3:20`. A unit noun after the pair now means an amount was said, and a label word before it means the number names something. Real times are untouched: "meet at four thirty" is still `4:30`.
+- **The acronym rule stopped eating the word "I".** "Can I A B test this" typed as `Can IAB test this`. After an auxiliary the leading letter is read as the word, which still leaves "I R S integration" alone, and a trailing lone "s" joins on, so "K P I s" is `KPIs`.
+- **Percents and dollars no longer convert half of a bigger number.** "two hundred thirty dollars" became `two hundred $30`. Murmur does not compose hundreds, so it leaves the whole amount spoken.
+- **The two auto-format rules that interpret have their own switches**, nested under Auto-format on the Typing tab: **Times without am or pm** and **Spelled-out letters**. One bad rewrite no longer costs you dates and percents too.
+- **Word packs**: curated dictionaries that ship with Murmur, on the Dictionary tab. Switch one on and it knows a whole domain's names at once. The first is **Qualtrics** (products, measures, the acronyms, the tools). Every pack lists its terms, so you can read exactly what it captures before turning it on, and your own dictionary always wins over a pack's.
+- **`murmur --update`** installs the newest version over this one. No clone to find, nothing to paste. Quit Murmur first; it says so rather than failing halfway.
+- **A one-line installer** for both platforms, in [Install](#install). It handles uv, the PATH, and Murmur in one go, so "open a new terminal first" stops being a step you can skip by accident.
+- **The first launch opens the settings page** instead of leaving you at a tray icon with nothing to go on.
+- **The start-cue mic mute is a setting now.** Muting the first 0.26s of every take keeps the chime out of your transcript on speakers and costs you a syllable for nothing on headphones. It is a row under Chime volume, on by default.
+- **A Report an issue link** on the App tab, and the App tab says how to update. Nothing is sent from the page; the link opens GitHub.
+- The menu bar mark and the menu no longer do disk work on the dictation path, and the README gained sections on [what to tell IT](#for-whoever-asks-about-it-at-work), [corporate networks](#behind-a-corporate-network), and [dictating during a meeting](#dictating-during-a-meeting).
 
 ### 0.11.3
 
@@ -96,7 +164,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 ### 0.9.1
 
 - **The chime stopped ending up in your transcript.** The start cue sounds while the mic is already recording, so it was landing in the audio and the model typed it as "mm" or "mmhmm". Murmur now silences the microphone for exactly as long as the cue plays, so the take begins with your voice and nothing else. Nothing is lost from what you say: the muted stretch is the chime, which is over before you start talking.
-- **Chime volume is yours to set.** A slider under Behavior, from 100% down to 0%. 0% silences the cues without turning the chimes off, so the timing (and the mic muting that goes with it) stays exactly as it was. The Play button previews the level you are dragging to, before you save.
+- **Chime volume is yours to set.** A slider under Behavior, from 100% down to 0%. At 0% nothing sounds, and nothing is muted either, so it matches switching chimes off while keeping the setting where you can find it. The Play button previews the level you are dragging to, before you save.
 
 ### 0.9.0
 
@@ -164,13 +232,27 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
   - **Either one can be switched off**, so long as one is left. Want only a two-key combination and no bare key? Switch the first one off. Murmur refuses to leave you with both off, since there would be no way to dictate.
   - The two cannot overlap: if one is contained in the other (`ctrl_r` and `ctrl_r+space`), the shorter one always fires first, so Murmur rejects that pair instead of leaving you with a hotkey that never works.
 - **Recording**: pick a microphone or leave it on the system default, and Test mic listens for about a second and shows where your voice lands on a zoned meter (red silent, amber faint, green good), with a clear "Test complete" line naming the device it heard. The same tab holds the recording pill (a small always-on-top overlay with bars that move to your voice; Windows and Linux, since macOS shows the menu-bar mic instead), the max recording length, and the tap-lock window.
-- **Typing**: everything about what lands at your cursor. **Auto-format speech**: spoken times, dates, numbers, and spelled-out acronyms come out written, so "one pm" types as `1:00 PM`, "four thirty" as `4:30`, "twenty twenty six" as `2026`, "fifty percent" as `50%`, and letters said one at a time join up, "W S A" as `WSA`; grammar the model itself writes is trusted, so "which one am I" is never mangled and "A, B, or C" keeps its commas. **Drop filler words**: "um" and "uh" never get typed, and only sounds that are never real words are on the list (`filler_words` in the config takes additions). Plus trailing space, paste versus type-it-out, and the clipboard restore delay.
-- **Sounds**: chimes on or off, with **Chime volume** and its Play preview on the same row (0% is silent without switching chimes off). Murmur mutes the mic for exactly the length of the start cue, so the chime can never be recorded and transcribed as "mm". **Quiet other audio** turns the system volume down while you talk and puts it back at the exact level afterward (off by default; macOS and Windows; the slider sets how far down).
-- **Dictionary**: see below. Recent transcripts sit on the same tab, newest first, so testing an entry is dictate, refresh, check, and the keep-history toggle is right beside the list it feeds.
+- **Typing**: everything about what lands at your cursor. **Auto-format speech**: spoken times, dates, and numbers come out written, so "one pm" types as `1:00 PM`, "july third" as `July 3rd`, "twenty twenty six" as `2026`, "fifty percent" as `50%`; grammar the model itself writes is trusted, so "which one am I" is never mangled and "A, B, or C" keeps its commas, and a number that is a quantity or a label stays spoken ("two thirty minute demos", "version three twenty"). Two rules that interpret rather than transcribe nest under it with their own switches, both on by default: **Times without am or pm** ("four thirty" as `4:30`) and **Spelled-out letters** ("W S A" as `WSA`). **Drop filler words**: "um" and "uh" never get typed, and only sounds that are never real words are on the list (`filler_words` in the config takes additions). Plus trailing space, paste versus type-it-out, and the clipboard restore delay.
+- **Sounds**: chimes on or off, with **Chime volume** and its Play preview on the same row (at 0% nothing sounds and nothing is muted). **Keep the chime out of the take** sits under the slider: the start cue plays while the mic is already open, so without it the model hears the cue and types "mm". It costs the first 0.26s of every take, which buys nothing on headphones where the cue never reaches the mic, so turn it off there. **Quiet other audio** turns the system volume down while you talk and puts it back at the exact level afterward (off by default; macOS and Windows; the slider sets how far down).
+- **Dictionary**: **Word packs** first (see below), then your own vocabulary and replacements. Recent transcripts sit on the same tab, newest first, so testing an entry is dictate, refresh, check, and the keep-history toggle is right beside the list it feeds.
 - **Model**: pick from the menu (Parakeet v2/v3, Whisper base, Canary 1B v2) or enter any onnx-asr name / Hugging Face repo id via Custom, plus precision and a language code for the models that read one. A new model downloads on first use and loads on the next dictation. See [Choosing a model](#choosing-a-model).
-- **App**: Open Murmur at login (Windows and macOS; see [below](#do-i-need-to-keep-the-terminal-open-start-at-login)) and the daily update check, which is the only network request Murmur makes and sends nothing about you.
+- **App**: Open Murmur at login (Windows and macOS; see [below](#do-i-need-to-keep-the-terminal-open-start-at-login)), the daily update check, which is the only network request Murmur makes and sends nothing about you, and a Help panel with the version and a Report an issue link.
 
 ### The dictionary
+
+#### Word packs
+
+Curated dictionaries that ship with Murmur, on the Dictionary tab. Switch one on and Murmur knows a whole domain's names at once, instead of everybody on a team independently discovering that "XM" comes out as "ex em".
+
+- **Qualtrics** is the first one: the products (CoreXM, EmployeeXM, XM Discover, Stats iQ, and the rest), the measures (NPS, CSAT, CES, eNPS), the acronyms product managers say all day (OKR, PRD, SLA, ARR, SOC 2), and the tools that come up by name constantly. It also fixes the mishearings, so "quality tricks" types as `Qualtrics`, "see sat" as `CSAT`, "a b test" as `A/B test`, and "p zero" as `P0`.
+
+**Show terms** on a pack's row lists every word and every heard-to-typed pair it contains, because switching on a dictionary you cannot read is a leap of faith.
+
+Packs never touch your own vocabulary and replacements. They are merged in when a transcript is processed, with **your entries first**, so a personal fix always beats a pack's and nothing a pack ships can end up in your export as if you had typed it. Turning a pack off takes its terms with it, and updating Murmur updates the pack. In the config the setting is a list of ids: `"dictionary_packs": ["qualtrics"]`.
+
+Anything that is also an ordinary English word stays out of a pack on purpose. A vocabulary entry for "Slack" would recase "some slack in the timeline", and one for "Zoom" would recase "zoom in on the funnel", so those are left to the model, which already spells them right as product names.
+
+#### Your own words
 
 Two mechanisms, both applied to every transcript before it is pasted:
 
@@ -198,6 +280,7 @@ murmur --import-dictionary murmur-dictionary.json
 | `device` | `null` | Mic name substring; `null` uses the system default |
 | `sounds` | `true` | Audio cues on state changes |
 | `sound_volume` | `100` | How loud the cues are, 0-100; `0` is silent |
+| `mute_start_cue` | `true` | Silence the mic while the start chime plays, so it is never transcribed. Costs the first ~0.26s of a take; pointless on headphones |
 | `paste` | `true` | `false` types character by character instead of pasting |
 | `restore_clipboard_ms` | `600` | Delay before restoring your previous clipboard; `-1` never restores |
 | `tap_lock_ms` | `350` | Presses shorter than this lock hands-free recording |
@@ -205,12 +288,15 @@ murmur --import-dictionary murmur-dictionary.json
 | `trailing_space` | `true` | Append a space so back-to-back dictations flow |
 | `history` | `true` | Log transcripts to `~/.murmur/history.jsonl` |
 | `pill` | `true` | Floating recording overlay (Windows/Linux) |
-| `formatting` | `true` | Spoken times/dates/numbers/acronyms become written forms (4:30, 2026, WSA) |
+| `formatting` | `true` | Spoken times/dates/numbers become written forms (1:00 PM, July 3rd, 2026, 50%) |
+| `format_bare_times` | `true` | Under `formatting`: a clock time with no am/pm said ("four thirty" -> `4:30`) |
+| `format_acronyms` | `true` | Under `formatting`: spelled-out letters join up ("W S A" -> `WSA`) |
 | `remove_fillers` | `true` | Drop filler words from transcripts before they are typed |
 | `filler_words` | `["um","uh","erm","uhm"]` | The words removed. Add your own for a more aggressive pass |
 | `update_check` | `true` | Ask GitHub once a day whether a newer Murmur exists |
 | `duck_audio` | `false` | Turn other audio down while recording, then restore it (macOS/Windows) |
 | `duck_percent` | `20` | Output volume to drop to while recording, as a percentage |
+| `dictionary_packs` | `[]` | Word packs to switch on, by id (`["qualtrics"]`) |
 | `vocabulary` | `[]` | Dictionary words/phrases, spelled how they should be typed |
 | `replacements` | `[]` | Exact fixes: `{"from": "heard", "to": "typed"}` |
 | `vocab_threshold` | `0.82` | How close a word must sound to snap to vocabulary (lower catches more) |
@@ -227,6 +313,7 @@ murmur --enable-autostart    # start at login (also --disable-autostart)
 murmur --list-devices        # list input devices
 murmur --doctor              # check mic, model, permissions, clipboard
 murmur --check-update        # ask GitHub whether a newer version exists
+murmur --update              # install the newest version over this one
 murmur --export-dictionary   # write your dictionary to a file for another device
 murmur --import-dictionary murmur-dictionary.json
 ```
@@ -277,7 +364,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 - **Hotkey suddenly does nothing (any platform)**: check the menu bar or tray menu for **Pause dictation**. Paused, Murmur ignores the hotkeys and the idle mic dims until you toggle it back.
 - **Hotkey does nothing (macOS)**: Input Monitoring permission is missing, or it was granted while Murmur was already running. The hotkey only attaches at launch, so the fix is always the same: grant it to your terminal (`murmur --doctor` and the settings page both confirm which state you are in), then quit Murmur and open it again. Granted it and it still does nothing? Restart the computer once; that clears every cached permission state.
 - **Nothing pastes (macOS)**: same story with the Accessibility permission.
-- **The hotkey or pasting stops after an update (macOS)**: macOS ties Input Monitoring and Accessibility to the exact program, and `uv tool install --reinstall` can reset them. Re-grant in System Settings > Privacy & Security; `murmur --doctor` shows what is missing.
+- **The hotkey or pasting stops after an update (macOS)**: macOS ties Input Monitoring and Accessibility to the exact program, and reinstalling (which is what `murmur --update` does) can reset them. Re-grant in System Settings > Privacy & Security; `murmur --doctor` shows what is missing.
 - **A key you rebound to does nothing (macOS)**: some top-row F-keys are media keys (volume, brightness) that Murmur cannot see. Hold Fn while pressing it, enable "Use F1, F2, etc. keys as standard function keys" in System Settings, or pick a bare modifier like `cmd_r`.
 - **An app rejects the paste** (some terminals, password fields): set `"paste": false` to type the text instead.
 - **Clipboard contents vanished**: Murmur restores text clipboards after pasting, but images and files are lost. Set `restore_clipboard_ms` to `-1` if you would rather keep the transcript on the clipboard.
@@ -287,6 +374,8 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 - **Model download failed midway**: rerun `murmur --download`; it resumes.
 - **Wrong mic**: pick it in the settings page, or `murmur --list-devices` and set `device` to a name substring.
 - **A word keeps coming out wrong**: add it to the vocabulary (settings page), or add an exact replacement if the model mishears it the same way every time.
+- **Something gets rewritten and you did not ask for it**: check the Dictionary tab for a word pack that is on (**Show terms** lists everything it changes), then the Typing tab, where **Times without am or pm** and **Spelled-out letters** each switch off on their own. Your own replacement always beats a pack's, so adding the pair you want is another way out.
+- **The first word of a take gets clipped**: Murmur mutes the mic for 0.26s while the start chime plays. On headphones the chime cannot reach the mic anyway, so turn off **Keep the chime out of the take** on the Sounds tab and that time comes back.
 
 ## Development
 
