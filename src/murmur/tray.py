@@ -5,6 +5,7 @@ the mic, paste the last transcript, pause, toggle login, quit."""
 from __future__ import annotations
 
 import logging
+import time
 import sys
 from typing import Callable
 
@@ -67,6 +68,18 @@ LABELS = {
 }
 
 
+_ICON_CACHE: dict = {}
+
+
+def icon_for(state: str, theme: str):
+    """render_icon, memoized. The mark is redrawn on every state change (three
+    per dictation), and there are only ever a handful of state/theme pairs."""
+    key = (state, theme)
+    if key not in _ICON_CACHE:
+        _ICON_CACHE[key] = render_icon(state, theme=theme)
+    return _ICON_CACHE[key]
+
+
 def render_icon(state: str, size: int = 64, theme: str = "dark"):
     """The tray mark: a retro broadcast mic in the state color — a capsule
     with three slats, cradle arc, stem, base. Drawn 4x on a 256 grid and
@@ -119,6 +132,7 @@ class Tray:
 
         self._state = "loading"
         self._theme = system_theme()
+        self._resets: list[Callable[[], None]] = []
         self._on_quit = on_quit
         self._on_settings = on_settings
         hint_text = hint if callable(hint) else (lambda: str(hint))
@@ -135,11 +149,12 @@ class Tray:
             # default=True makes double-clicking the tray icon open it.
             items.append(pystray.MenuItem("Settings...", self._settings, default=True))
         if on_paste_last is not None and last_transcript is not None:
+            has_transcript = self._fresh(last_transcript)
             items.append(
                 pystray.MenuItem(
                     "Paste last transcript",
                     self._wrap(on_paste_last, "paste last"),
-                    enabled=lambda item: bool(last_transcript()),
+                    enabled=lambda item: bool(has_transcript()),
                 )
             )
         if mic_choices is not None:
@@ -165,27 +180,29 @@ class Tray:
                 )
             )
         if on_toggle_autostart is not None and autostart_state is not None:
+            login = self._fresh(autostart_state)
             toggles.append(
                 pystray.MenuItem(
                     "Start at login",
                     self._wrap(on_toggle_autostart, "toggle autostart"),
-                    checked=lambda item: bool(autostart_state().get("enabled")),
-                    visible=lambda item: bool(autostart_state().get("supported")),
+                    checked=lambda item: bool(login().get("enabled")),
+                    visible=lambda item: bool(login().get("supported")),
                 )
             )
         if toggles:
             items += [pystray.Menu.SEPARATOR, *toggles]
         if update_available is not None and on_settings is not None:
+            has_update = self._fresh(update_available)
             items.append(
                 pystray.MenuItem(
                     "Update available - open Settings",
                     self._settings,
-                    visible=lambda item: bool(update_available()),
+                    visible=lambda item: bool(has_update()),
                 )
             )
         items += [pystray.Menu.SEPARATOR, pystray.MenuItem("Quit Murmur", self._quit)]
         menu = pystray.Menu(*items)
-        self._icon = pystray.Icon("murmur", render_icon("loading", theme=self._theme), "Murmur", menu)
+        self._icon = pystray.Icon("murmur", icon_for("loading", self._theme), "Murmur", menu)
         # The bar can flip light/dark mid-session (manual toggle, or Auto
         # appearance at sunset). A slow poll keeps the ink matched; only a
         # real flip re-renders. Off the recording path entirely.
@@ -205,12 +222,39 @@ class Tray:
         else:
             self._theme_stop = None
 
+    def _fresh(self, fn: Callable[[], object], ttl: float = 2.0):
+        """Memoize a menu callback for `ttl` seconds.
+
+        pystray re-evaluates every enabled/checked/visible callback whenever
+        the menu is rebuilt, and set_state rebuilds it on each state change,
+        so one dictation was asking the disk for the transcript tail, the
+        autostart state, and the update cache three times over. The menu only
+        has to be right when someone opens it, and nobody opens it three times
+        a second. Acting from the menu clears the cache (see _wrap), so a
+        checkmark still flips the instant you click it.
+        """
+        cell: dict = {"at": None, "value": None}
+
+        def read():
+            now = time.monotonic()
+            if cell["at"] is None or now - cell["at"] >= ttl:
+                cell["value"] = fn()
+                cell["at"] = now
+            return cell["value"]
+
+        self._resets.append(lambda: cell.update(at=None))
+        return read
+
     def _wrap(self, fn: Callable[[], None], what: str):
         def handler(icon, item):
             try:
                 fn()
             except Exception as e:
                 log.warning("%s failed: %s", what, e)
+            # The click just changed what the menu should say, so drop the
+            # memoized reads before asking pystray to redraw it.
+            for reset in self._resets:
+                reset()
             try:
                 icon.update_menu()
             except Exception:
@@ -234,7 +278,7 @@ class Tray:
     def set_state(self, state: str) -> None:
         self._state = state
         try:
-            self._icon.icon = render_icon(state, theme=self._theme)
+            self._icon.icon = icon_for(state, self._theme)
             self._icon.title = f"Murmur: {LABELS.get(state, state)}"
             self._icon.update_menu()
         except Exception as e:

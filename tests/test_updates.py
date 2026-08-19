@@ -145,3 +145,50 @@ def test_version_regex_handles_single_quotes():
 
 def test_version_regex_misses_cleanly_on_an_unexpected_file():
     assert updates._VERSION_RE.search("<html>404</html>") is None
+
+
+# -- murmur --update ---------------------------------------------------------
+
+def test_self_update_refuses_while_murmur_is_running(monkeypatch, capsys):
+    # Windows holds the running copy's files open, so uv would fail halfway
+    # with a permission error nobody can read. Ask instead.
+    from murmur.singleton import InstanceLock
+
+    lock = InstanceLock()
+    assert lock.acquire()
+    try:
+        assert updates.self_update() == 1
+    finally:
+        lock.close()
+    assert "Quit it first" in capsys.readouterr().out
+
+
+def test_self_update_without_uv_says_where_to_get_it(monkeypatch, capsys):
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    assert updates.self_update() == 1
+    out = capsys.readouterr().out
+    assert "uv" in out and "astral.sh" in out
+
+
+def test_self_update_runs_the_reinstall(monkeypatch, capsys):
+    seen = {}
+
+    class Done:
+        returncode = 0
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+    monkeypatch.setattr("subprocess.run", lambda cmd, *a, **k: (seen.update(cmd=cmd), Done())[1])
+    assert updates.self_update() == 0
+    assert seen["cmd"][1:4] == ["tool", "install", "--force"]
+    assert seen["cmd"][-1] == updates.INSTALL_URL
+    assert "Start Murmur again" in capsys.readouterr().out
+
+
+def test_self_update_passes_the_failure_code_back(monkeypatch, capsys):
+    class Done:
+        returncode = 2
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+    monkeypatch.setattr("subprocess.run", lambda cmd, *a, **k: Done())
+    assert updates.self_update() == 2
+    assert "did not finish" in capsys.readouterr().out

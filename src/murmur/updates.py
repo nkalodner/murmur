@@ -32,6 +32,10 @@ log = logging.getLogger("murmur")
 VERSION_URL = "https://raw.githubusercontent.com/nkalodner/murmur/main/src/murmur/__init__.py"
 CHANGELOG_URL = "https://github.com/nkalodner/murmur#whats-new"
 CACHE_PATH = CONFIG_DIR / "update.json"
+# What `murmur --update` reinstalls from. The archive rather than the git URL,
+# so updating needs no git and no clone to find: the tarball is the same
+# subtree split the mirror publishes, with pyproject.toml at its root.
+INSTALL_URL = "https://github.com/nkalodner/murmur/archive/refs/heads/main.zip"
 
 CHECK_INTERVAL = 24 * 60 * 60  # once a day is plenty for a hand-updated tool
 TIMEOUT = 6.0
@@ -154,3 +158,53 @@ def check_in_background() -> None:
             log.debug("background update check failed: %s", e)
 
     threading.Thread(target=run, name="murmur-update-check", daemon=True).start()
+
+
+def self_update(source: str = INSTALL_URL) -> int:
+    """Reinstall Murmur over itself. Returns a process exit code.
+
+    Updating used to be four manual steps (quit, pull, reinstall, relaunch),
+    which is three too many for anyone who did not install it themselves, so
+    most people simply never updated. Installing from the published archive
+    keeps that to one command: there is no checkout to locate and no path to
+    remember, and uv fetches, builds, and swaps the tool in place.
+
+    The one step that cannot be automated is the quit: on Windows the running
+    copy holds its own files open, so the reinstall would fail halfway. The
+    instance lock already knows whether a copy is up, so this asks rather
+    than letting uv fail with a file-permission error nobody can read.
+    """
+    import shutil
+    import subprocess
+
+    from murmur.singleton import InstanceLock
+
+    uv = shutil.which("uv")
+    if not uv:
+        print("Cannot find uv, which is what installs Murmur.")
+        print("Install it from https://docs.astral.sh/uv/, open a new terminal, and try again.")
+        return 1
+
+    lock = InstanceLock()
+    if not lock.acquire():
+        print("Murmur is running, and it cannot replace its own files while it is.")
+        print("Quit it first (menu bar or tray icon > Quit Murmur), then run this again.")
+        return 1
+    lock.close()  # uv does the work; holding the port would only block the relaunch
+
+    print(f"Updating Murmur from {__version__}...")
+    try:
+        done = subprocess.run([uv, "tool", "install", "--force", "--reinstall", source])
+    except Exception as e:  # noqa: BLE001 - any failure here is the same message
+        print(f"Could not run uv: {e}")
+        return 1
+    if done.returncode != 0:
+        print()
+        print("The update did not finish. Troubleshooting: " + CHANGELOG_URL.split("#")[0])
+        return done.returncode
+
+    CACHE_PATH.unlink(missing_ok=True)  # the banner is about a version we just left
+    print()
+    print("Updated. Start Murmur again to run the new version.")
+    print(f"What changed: {CHANGELOG_URL}")
+    return 0

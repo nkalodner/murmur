@@ -766,6 +766,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="ask GitHub whether a newer Murmur exists, then exit",
     )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="install the newest Murmur over this one, then exit (quit Murmur first)",
+    )
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--version", action="version", version=f"murmur {__version__}")
     args = parser.parse_args(argv)
@@ -793,6 +798,12 @@ def main(argv: list[str] | None = None) -> int:
     # -v turns up murmur's own logs without drowning in library debug noise.
     logging.getLogger("murmur").setLevel(logging.DEBUG if args.verbose else logging.INFO)
 
+    # Whether this is someone's very first launch, decided BEFORE load() (which
+    # writes the default file). A first run ends at a tray icon with no idea
+    # what to do next, so it opens the settings page the way an installer would.
+    from murmur.config import CONFIG_PATH
+
+    first_run = not CONFIG_PATH.exists()
     cfg = load()
 
     # Dictionary transfer runs on the freshly-loaded config, before any
@@ -913,6 +924,10 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print("Murmur will start at login." if args.enable_autostart else "Murmur will no longer start at login.")
         return 0
+    if args.update:
+        from murmur import updates
+
+        return updates.self_update()
     if args.check_update:
         from murmur import updates
 
@@ -921,8 +936,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Murmur {info['latest']} is available (you have {info['current']}).")
             print(f"What changed: {info['changelog']}")
             print("Quit Murmur, then update with:")
-            print("  uv tool install --reinstall "
-                  "https://github.com/nkalodner/murmur/archive/refs/heads/main.zip")
+            print("  murmur --update")
         elif info["latest"]:
             print(f"Murmur {info['current']} is the latest version.")
         else:
@@ -976,7 +990,7 @@ def main(argv: list[str] | None = None) -> int:
         lock.close()
         return 2
     try:
-        app.run(use_tray=not args.no_tray, open_settings=args.settings)
+        app.run(use_tray=not args.no_tray, open_settings=args.settings or first_run)
     except ValueError as e:  # bad hotkey name
         log.error("%s", e)
         lock.close()
