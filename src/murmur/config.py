@@ -52,6 +52,9 @@ class Config:
     update_check: bool = True  # ask GitHub once a day whether a newer Murmur exists
     # Personal dictionary: words/phrases spelled the way you want them typed
     # (fuzzy-matched against each transcript), plus exact heard->typed pairs.
+    # Curated dictionaries shipped with Murmur; see packs.py. Ids only, so the
+    # terms stay out of the user's own dictionary and update with the app.
+    dictionary_packs: list[str] = field(default_factory=list)
     vocabulary: list[str] = field(default_factory=list)
     replacements: list[dict] = field(default_factory=list)  # {"from": "...", "to": "..."}
     vocab_threshold: float = 0.82  # 0..1; higher = stricter vocabulary matching
@@ -236,6 +239,15 @@ def validate(cfg: Config) -> None:
         raise ValueError("vocab_threshold must be between 0.5 and 1")
     if not isinstance(cfg.vocabulary, list) or not all(isinstance(v, str) for v in cfg.vocabulary):
         raise ValueError("vocabulary must be a list of strings")
+    if not isinstance(cfg.dictionary_packs, list) or not all(
+        isinstance(v, str) for v in cfg.dictionary_packs
+    ):
+        raise ValueError("dictionary_packs must be a list of strings")
+    from murmur.packs import unknown_ids
+
+    missing = unknown_ids(cfg.dictionary_packs)
+    if missing:
+        raise ValueError(f"unknown dictionary pack: {', '.join(missing)}")
     if not isinstance(cfg.filler_words, list) or not all(
         isinstance(v, str) for v in cfg.filler_words
     ):
