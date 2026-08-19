@@ -10,9 +10,9 @@ from typing import Callable
 
 log = logging.getLogger("murmur")
 
-# Idle is menu-bar white so Murmur sits flush with the other icons on a dark
-# macOS menu bar or Windows taskbar; the states keep their colors, and the
-# dimmed states are the same white at lower alpha.
+# Idle is bar-colored ink: white on a dark macOS menu bar or Windows taskbar,
+# near-black on a light one (system_theme decides). The states keep their
+# colors on either bar, and the dimmed states are the ink at lower alpha.
 COLORS = {
     "loading": (235, 236, 240, 130),
     "idle": (235, 236, 240, 255),
@@ -20,6 +20,44 @@ COLORS = {
     "busy": (245, 165, 36, 255),
     "paused": (235, 236, 240, 95),
 }
+LIGHT_INK = (58, 60, 64)
+_INK_STATES = ("idle", "loading", "paused")
+
+
+def system_theme() -> str:
+    """The bar the icon sits on: "dark" or "light". Unknown reads as dark,
+    which keeps the white ink, so a detection failure never blanks the icon
+    on the common dark bar."""
+    try:
+        if sys.platform == "darwin":
+            import subprocess
+
+            # The global AppleInterfaceStyle key exists only in dark mode;
+            # in light mode the read errors out.
+            out = subprocess.run(
+                ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                capture_output=True, text=True, timeout=2,
+            )
+            return "dark" if out.returncode == 0 and "Dark" in out.stdout else "light"
+        if sys.platform == "win32":
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"SOFTWARE\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            ) as key:
+                light, _ = winreg.QueryValueEx(key, "SystemUsesLightTheme")
+            return "light" if light else "dark"
+    except Exception as e:
+        log.debug("theme detection failed: %s", e)
+    return "dark"
+
+
+def _color(state: str, theme: str):
+    c = COLORS.get(state, COLORS["idle"])
+    if theme == "light" and state in _INK_STATES:
+        c = (*LIGHT_INK, c[3])
+    return c
 LABELS = {
     "loading": "loading model",
     "idle": "idle",
@@ -29,7 +67,7 @@ LABELS = {
 }
 
 
-def render_icon(state: str, size: int = 64):
+def render_icon(state: str, size: int = 64, theme: str = "dark"):
     """The tray mark: a retro broadcast mic in the state color — slatted
     capsule, cradle arc, stem, base, one sound wave off each side. Drawn 4x on
     a 256 grid and downscaled so the curves stay smooth at menu-bar sizes;
@@ -60,7 +98,7 @@ def render_icon(state: str, size: int = 64):
     for y in (58, 79, 100, 121):  # the retro slats, capsule-width only
         arr[int((y - 4) * u):int((y + 4) * u), int(106 * u):int(150 * u), 3] = 0
     img = Image.fromarray(arr).resize((size, size), Image.LANCZOS)
-    color = COLORS.get(state, COLORS["idle"])
+    color = _color(state, theme)
     out = np.array(img).astype(np.uint16)
     out[:, :, 0], out[:, :, 1], out[:, :, 2] = color[0], color[1], color[2]
     out[:, :, 3] = out[:, :, 3] * color[3] // 255
@@ -85,6 +123,7 @@ class Tray:
         import pystray
 
         self._state = "loading"
+        self._theme = system_theme()
         self._on_quit = on_quit
         self._on_settings = on_settings
         hint_text = hint if callable(hint) else (lambda: str(hint))
@@ -151,7 +190,25 @@ class Tray:
             )
         items += [pystray.Menu.SEPARATOR, pystray.MenuItem("Quit Murmur", self._quit)]
         menu = pystray.Menu(*items)
-        self._icon = pystray.Icon("murmur", render_icon("loading"), "Murmur", menu)
+        self._icon = pystray.Icon("murmur", render_icon("loading", theme=self._theme), "Murmur", menu)
+        # The bar can flip light/dark mid-session (manual toggle, or Auto
+        # appearance at sunset). A slow poll keeps the ink matched; only a
+        # real flip re-renders. Off the recording path entirely.
+        if sys.platform in ("darwin", "win32"):
+            import threading
+
+            self._theme_stop = threading.Event()
+
+            def watch_theme():
+                while not self._theme_stop.wait(15):
+                    theme = system_theme()
+                    if theme != self._theme:
+                        self._theme = theme
+                        self.set_state(self._state)
+
+            threading.Thread(target=watch_theme, name="murmur-theme", daemon=True).start()
+        else:
+            self._theme_stop = None
 
     def _wrap(self, fn: Callable[[], None], what: str):
         def handler(icon, item):
@@ -182,7 +239,7 @@ class Tray:
     def set_state(self, state: str) -> None:
         self._state = state
         try:
-            self._icon.icon = render_icon(state)
+            self._icon.icon = render_icon(state, theme=self._theme)
             self._icon.title = f"Murmur: {LABELS.get(state, state)}"
             self._icon.update_menu()
         except Exception as e:
@@ -209,6 +266,8 @@ class Tray:
         self._icon.run(setup=setup)
 
     def stop(self) -> None:
+        if self._theme_stop is not None:
+            self._theme_stop.set()
         try:
             self._icon.stop()
         except Exception:

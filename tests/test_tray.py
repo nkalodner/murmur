@@ -209,3 +209,42 @@ def test_tray_action_errors_never_escape(monkeypatch):
     paste = next(i for i in items if _label(i) == "Paste last transcript")
     paste.action(tray._icon, paste)  # must swallow, menu still refreshed
     assert tray._icon.updates == 1
+
+
+# ---- bar theme -------------------------------------------------------------
+
+
+def test_system_theme_defaults_to_dark_and_never_raises():
+    from murmur.tray import system_theme
+
+    assert system_theme() in ("dark", "light")  # linux: the dark default
+
+
+def test_mac_theme_reads_apple_interface_style(monkeypatch):
+    import types
+
+    import murmur.tray as tray
+
+    monkeypatch.setattr(tray.sys, "platform", "darwin")
+    import subprocess as sp
+
+    def fake_run(cmd, **kw):
+        assert cmd[:2] == ["defaults", "read"]
+        return types.SimpleNamespace(returncode=0, stdout="Dark\n")
+
+    monkeypatch.setattr(sp, "run", fake_run)
+    assert tray.system_theme() == "dark"
+    monkeypatch.setattr(sp, "run", lambda cmd, **kw: types.SimpleNamespace(returncode=1, stdout=""))
+    assert tray.system_theme() == "light"  # the key only exists in dark mode
+
+
+def test_light_theme_flips_ink_but_not_state_colors():
+    dark_idle = np.asarray(render_icon("idle", theme="dark"))
+    light_idle = np.asarray(render_icon("idle", theme="light"))
+    ys, xs = np.nonzero(light_idle[:, :, 3])
+    assert light_idle[ys[0], xs[0], :3].max() <= 100  # dark ink on a light bar
+    ys, xs = np.nonzero(dark_idle[:, :, 3])
+    assert dark_idle[ys[0], xs[0], :3].min() >= 230  # white ink on a dark bar
+    rec = np.asarray(render_icon("recording", theme="light"))
+    ys, xs = np.nonzero(rec[:, :, 3])
+    assert rec[ys[0], xs[0], 0] > 180  # recording stays red on either bar
