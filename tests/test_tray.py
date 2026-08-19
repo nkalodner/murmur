@@ -2,7 +2,7 @@
 import numpy as np
 
 from murmur.app import last_transcript, mic_choices
-from murmur.tray import COLORS, LABELS, render_icon
+from murmur.tray import _ICON_CACHE, COLORS, LABELS, Tray, icon_for, render_icon
 
 
 def _alpha(img):
@@ -256,3 +256,51 @@ def test_light_theme_flips_ink_but_not_state_colors():
     rec = np.asarray(render_icon("recording", theme="light"))
     ys, xs = np.nonzero(rec[:, :, 3])
     assert rec[ys[0], xs[0], 0] > 180  # recording stays red on either bar
+
+
+# -- keeping the menu off the dictation path ---------------------------------
+
+def _memo():
+    """A bare Tray with just the memo plumbing (pystray needs a display)."""
+    tray = Tray.__new__(Tray)
+    tray._resets = []
+    return tray
+
+
+def test_menu_callbacks_are_read_once_per_burst():
+    # set_state rebuilds the menu on every state change, three times a
+    # dictation, and each rebuild re-evaluates every enabled/checked callback.
+    # Those read the history file, the autostart state and the update cache.
+    calls = []
+    tray = _memo()
+    read = tray._fresh(lambda: calls.append(1) or "value")
+    for _ in range(5):
+        assert read() == "value"
+    assert len(calls) == 1
+
+
+def test_acting_from_the_menu_refreshes_it_immediately():
+    # A 2s cache must not make a checkmark lag behind the click that set it.
+    calls = []
+    tray = _memo()
+    read = tray._fresh(lambda: calls.append(1) or len(calls))
+    read()
+    for reset in tray._resets:
+        reset()
+    read()
+    assert len(calls) == 2
+
+
+def test_icon_is_rendered_once_per_state_and_theme():
+    _ICON_CACHE.clear()
+    first = icon_for("idle", "dark")
+    assert icon_for("idle", "dark") is first
+    assert icon_for("idle", "light") is not first
+    assert set(_ICON_CACHE) == {("idle", "dark"), ("idle", "light")}
+
+
+def test_cached_icon_matches_a_fresh_render():
+    _ICON_CACHE.clear()
+    assert np.asarray(icon_for("recording", "dark")).tolist() == (
+        np.asarray(render_icon("recording", theme="dark")).tolist()
+    )
