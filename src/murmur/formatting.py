@@ -105,9 +105,20 @@ _COMPOUND = re.compile(rf"\b(?P<tens>{_TENS_A})[ -](?P<unit>{_UNITS_A})\b", re.I
 
 # Letters spelled out one at a time join into an acronym ("W S A" -> "WSA").
 # Only runs of bare capitals count — that is how the model writes letter
-# names — so the words "a" and "I" never join into anything, and punctuation
-# between letters breaks the run, keeping lists like "A, B, or C" intact.
-_ACRONYM = re.compile(r"(?<![A-Za-z0-9.])(?:[A-Z] )+[A-Z](?![A-Za-z0-9])")
+# names — so the word "a" never joins into anything, and punctuation between
+# letters breaks the run, keeping lists like "A, B, or C" intact. A lone "s"
+# after the run is the plural, so "K P I s" is "KPIs" rather than "KPI s".
+_ACRONYM = re.compile(
+    r"(?<![A-Za-z0-9.])(?P<run>(?:[A-Z] )+[A-Z])(?P<plural> s)?(?![A-Za-z0-9])"
+)
+# "I" is a real word written as a bare capital, so a run that starts with one
+# right after an auxiliary is a pronoun plus an acronym ("Can I A B test" is
+# not "Can IAB test"). Anywhere else a leading "I" is part of the acronym,
+# which is what keeps "I R S integration" working.
+_PRONOUN_I_BEFORE = frozenset({
+    "can", "could", "should", "would", "will", "shall", "may", "might",
+    "must", "do", "does", "did", "am", "was", "were", "have", "has", "had",
+})
 
 # Spoken years pair a century word with a two-digit tail: "twenty twenty six"
 # -> 2026, "nineteen oh five" -> 1905, "seventeen seventy six" -> 1776.
@@ -133,16 +144,46 @@ _BARE_TIME = re.compile(
 )
 
 _NUMBER_WORDS = frozenset(_UNITS) | frozenset(_TEENS) | frozenset(_TENS)
+
+
+def _plural(*words: str) -> frozenset:
+    return frozenset(words) | frozenset(w + "s" for w in words)
+
+
+# A unit noun after a match means an amount was said, not a clock or a
+# calendar: "two thirty minute demos" is two demos, not 2:30, and "nineteen
+# twenty years ago" is a count. Durations dominate the list because that is
+# how a meeting gets described out loud.
+_UNIT_NOUNS = _plural(
+    "minute", "second", "hour", "day", "week", "month", "year", "quarter",
+    "sprint", "page", "slide", "point", "dollar", "seat", "user", "row",
+    "line", "item", "word", "character", "person", "step",
+) | {"percent", "people"}
 # Another number word next to a match means a counting run or a larger spoken
-# figure ("eighteen nineteen twenty"), and a quantity word after means an
-# amount was said, not a clock or calendar ("nineteen twenty years ago").
-_QUANTITY_AFTER = _NUMBER_WORDS | {"percent", "dollars", "years"}
+# figure ("eighteen nineteen twenty").
+_QUANTITY_AFTER = _NUMBER_WORDS | _UNIT_NOUNS
+# A label word before a match means the number identifies something rather
+# than telling the time: "version three twenty", "section four fifteen".
+_LABEL_BEFORE = frozenset({
+    "version", "v", "section", "chapter", "step", "page", "slide", "figure",
+    "item", "option", "part", "phase", "sprint", "row", "line", "question",
+    "ticket", "issue", "build", "release", "revision", "appendix", "table",
+    "room", "suite", "unit", "model", "number", "no", "milestone",
+})
+# A larger figure was being said when one of these leads: "two hundred thirty
+# dollars" is $230, not "two hundred $30". Murmur does not compose hundreds,
+# so it leaves the whole amount spoken rather than converting half of it.
+_AMOUNT_BEFORE = _NUMBER_WORDS | {"hundred", "thousand", "million", "billion", "and"}
 
 
 def _neighbors(m: re.Match) -> tuple[str, str]:
-    """The words immediately before and after a match, lowercased ("" if none)."""
+    """The words immediately before and after a match, lowercased ("" if none).
+
+    A hyphen counts as a separator on the right, because the model writes the
+    quantity shape that way: "two thirty-minute demos" has to see "minute".
+    """
     before = re.search(r"([a-z']+)\s+$", m.string[: m.start()], re.IGNORECASE)
-    after = re.match(r"\s+([a-z']+)", m.string[m.end() :], re.IGNORECASE)
+    after = re.match(r"[\s-]+([a-z']+)", m.string[m.end() :], re.IGNORECASE)
     return (
         before.group(1).lower() if before else "",
         after.group(1).lower() if after else "",
@@ -220,13 +261,26 @@ def format_speech(text: str) -> str:
 
     def bare_time_sub(m: re.Match) -> str:
         before, after = _neighbors(m)
-        if before in _NUMBER_WORDS or after in _QUANTITY_AFTER:
+        if before in _NUMBER_WORDS or before in _LABEL_BEFORE:
+            return m.group(0)
+        if after in _QUANTITY_AFTER:
             return m.group(0)
         hour = _word_num(m.group("hour"))
         minute = _word_num(m.group("min"))
         if not 1 <= hour <= 12 or not 0 <= minute <= 59:
             return m.group(0)
         return f"{hour}:{minute:02d}"
+
+    def acronym_sub(m: re.Match) -> str:
+        letters = m.group("run").split(" ")
+        plural = "s" if m.group("plural") else ""
+        if letters[0] == "I" and _neighbors(m)[0] in _PRONOUN_I_BEFORE:
+            # Only two letters left is too little to be sure it was spelled
+            # at all, so leave the whole thing exactly as the model wrote it.
+            if len(letters) < 3:
+                return m.group(0)
+            return f"I {''.join(letters[1:])}{plural}"
+        return "".join(letters) + plural
 
     def compound_sub(m: re.Match) -> str:
         # Flanked by another tens/teens word it is part of a larger spoken
@@ -240,14 +294,22 @@ def format_speech(text: str) -> str:
     # Acronyms join first so a spelled "P M" reads as a meridiem to the time
     # rules; explicit am/pm times go before bare ones; years before bare
     # times and compounds so "twenty twenty six" is never split up.
-    text = _ACRONYM.sub(lambda m: m.group(0).replace(" ", ""), text)
+    text = _ACRONYM.sub(acronym_sub, text)
     text = _TIME.sub(time_sub, text)
     text = _OCLOCK.sub(oclock_sub, text)
     text = _MONTH_DAY.sub(month_day_sub, text)
     text = _DAY_OF_MONTH.sub(day_of_month_sub, text)
     text = _YEAR.sub(year_sub, text)
     text = _BARE_TIME.sub(bare_time_sub, text)
-    text = _PERCENT.sub(lambda m: f"{_amount(m.group('num'))}%", text)
-    text = _DOLLARS.sub(lambda m: f"${_amount(m.group('num'))}", text)
+    def amount_sub(fmt: str):
+        def sub(m: re.Match) -> str:
+            if _neighbors(m)[0] in _AMOUNT_BEFORE:
+                return m.group(0)
+            return fmt.format(_amount(m.group("num")))
+
+        return sub
+
+    text = _PERCENT.sub(amount_sub("{}%"), text)
+    text = _DOLLARS.sub(amount_sub("${}"), text)
     text = _COMPOUND.sub(compound_sub, text)
     return text

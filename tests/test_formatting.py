@@ -34,6 +34,15 @@ def test_conversions(said, written):
     ("the W S A's rules", "the WSA's rules"),
     ("three A M", "3:00 AM"),
     ("four thirty P M", "4:30 PM"),
+    ("the N P S score dropped", "the NPS score dropped"),
+    ("we need an S L A here", "we need an SLA here"),
+    ("sync with C S and P S", "sync with CS and PS"),
+    ("I R S integration", "IRS integration"),   # a leading I can be the acronym
+    ("our K P I s are green", "our KPIs are green"),   # the plural joins on
+    # After an auxiliary, a leading "I" is the pronoun, not the first letter.
+    ("Can I A B test the onboarding", "Can I AB test the onboarding"),
+    ("Should I C C the team", "Should I CC the team"),
+    ("did I O K that", "did I OK that"),
 ])
 def test_acronyms(said, written):
     assert format_speech(said) == written
@@ -83,6 +92,63 @@ def test_bare_times(said, written):
 ])
 def test_left_alone(text):
     assert format_speech(text) == text
+
+
+@pytest.mark.parametrize("text", [
+    # A unit noun after the pair means an amount was said, not a clock.
+    "three thirty minute meetings this week",
+    "two fifteen minute demos",
+    "book two thirty minute slots",
+    "we ran five thirty second ads",
+    "four thirty day trials",
+    "two thirty-minute sessions",   # the model's own hyphen still counts
+    # A label word before it means the number names something.
+    "we're on version three twenty",
+    "see section four fifteen",
+    "step four thirty",
+    "room nine fifteen",
+])
+def test_quantities_and_labels_are_not_times(text):
+    assert format_speech(text) == text
+
+
+@pytest.mark.parametrize("said, written", [
+    # The guards must not swallow an ordinary time.
+    ("let's meet at four thirty", "let's meet at 4:30"),
+    ("push standup to nine forty five", "push standup to 9:45"),
+    ("the review is at eleven thirty tomorrow", "the review is at 11:30 tomorrow"),
+    ("the twenty twenty five roadmap", "the 2025 roadmap"),
+])
+def test_real_times_still_convert(said, written):
+    assert format_speech(said) == written
+
+
+@pytest.mark.parametrize("text", [
+    "Can I C",              # too little left to be sure it was spelled at all
+    "I think A and B are fine",
+])
+def test_acronym_leaves_pronouns_alone(text):
+    assert format_speech(text) == text
+
+
+@pytest.mark.parametrize("text", [
+    # Murmur does not compose hundreds, so it leaves the whole amount spoken
+    # rather than converting the tail and stranding the rest.
+    "one hundred forty percent",
+    "two hundred thirty dollars",
+    "a hundred and fifty dollars",
+])
+def test_partial_hundreds_stay_spoken(text):
+    assert format_speech(text) == text
+
+
+@pytest.mark.parametrize("said, written", [
+    ("ninety five percent", "95%"),
+    ("a hundred percent", "100%"),
+    ("twenty dollars", "$20"),
+])
+def test_plain_amounts_still_convert(said, written):
+    assert format_speech(said) == written
 
 
 def test_no_crashes_on_fuzz():
