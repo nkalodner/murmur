@@ -40,21 +40,29 @@ def test_icon_is_a_mic_not_a_dot():
     assert len(cols) < 16  # a dot or the base would span far wider
 
 
-def test_icon_has_retro_slats():
-    # The capsule is slatted: alpha at a slat's center must drop well below
-    # the solid band between slats, or the retro texture regressed away.
+def test_icon_has_exactly_three_slats():
+    # Noah's pick: the clean mic, three slats. Walk the capsule's center
+    # column and count the transparent runs; a fourth slat (or none) fails.
     a = _alpha(render_icon("idle"))
-    solid = a[17, 32]   # between the first two slats (y~70 on the 256 grid)
-    slat = a[20, 32]    # inside the second slat (y~79)
+    col = a[9:35, 32]  # the capsule's vertical span at 64px
+    gaps, inside = 0, False
+    for v in col:
+        low = v < 60
+        if low and not inside:
+            gaps += 1
+        inside = low
+    assert gaps == 3
+    solid = a[19, 32]   # band between the first two slats
+    slat = a[22, 32]    # center slat (y~88 on the 256 grid)
     assert solid > 150
     assert slat < solid * 0.5
 
 
-def test_icon_has_sound_waves():
-    # One wave arc off each side, past the cradle's horizontal extent.
+def test_icon_has_no_waves():
+    # The waves came off in 0.11.3; nothing may be drawn past the cradle.
     a = _alpha(render_icon("idle"))
-    assert a[:, 49:].sum() > 0  # right wave
-    assert a[:, :11].sum() > 0  # left wave
+    assert a[:, 49:].sum() == 0
+    assert a[:, :11].sum() == 0
 
 
 def test_idle_is_menu_bar_white():

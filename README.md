@@ -67,6 +67,10 @@ The one exception is the update check: once a day Murmur fetches a version numbe
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
+### 0.11.3
+
+- **The mic got its final cut.** The sound waves came off and the capsule carries three slats instead of four: just the clean retro mic, picked from six candidates rendered side by side at real menu bar size.
+
 ### 0.11.2
 
 - **The menu bar mic follows your bar's theme.** On a light macOS menu bar or a light Windows taskbar the idle mic turns dark ink instead of vanishing in white; on dark bars it stays white. Murmur checks every few seconds, so flipping the system appearance (or Auto appearance changing at sunset) flips the icon with it. Recording red and transcribing amber read on either bar and are unchanged.
