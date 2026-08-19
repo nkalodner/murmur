@@ -15,6 +15,7 @@ from queue import SimpleQueue
 
 from murmur import __version__
 from murmur.config import HISTORY_PATH, Config, load
+from murmur.packs import merge as pack_merge
 from murmur.textproc import process
 
 log = logging.getLogger("murmur")
@@ -245,10 +246,15 @@ class App:
             wav, seconds = job
             try:
                 cfg = self.cfg
+                # Enabled word packs ride behind the user's own dictionary,
+                # which is what makes a personal fix beat a pack's.
+                vocabulary, replacements = pack_merge(
+                    cfg.dictionary_packs, cfg.vocabulary, cfg.replacements
+                )
                 text = process(
                     self.transcriber.transcribe(wav),
-                    replacements=cfg.replacements,
-                    vocabulary=cfg.vocabulary,
+                    replacements=replacements,
+                    vocabulary=vocabulary,
                     vocab_threshold=cfg.vocab_threshold,
                     formatting=cfg.formatting,
                     format_bare_times=cfg.format_bare_times,
@@ -304,6 +310,7 @@ class App:
             log.debug("device listing failed: %s", e)
         from murmur import autostart, updates
         from murmur.models import KNOWN_MODELS
+        from murmur.packs import catalog as pack_catalog
 
         from murmur.macos import permission_status, restart_needed
 
@@ -319,6 +326,9 @@ class App:
             "update": updates.status(),
             # The curated menu the settings page renders its picker from.
             "models": [asdict(m) for m in KNOWN_MODELS],
+            # Word packs, terms included, so the page can list what each one
+            # captures without a second round trip.
+            "packs": pack_catalog(),
             # Live macOS grants, plus whether a grant arrived after the hotkey
             # listener started (which leaves it dead until Murmur reopens).
             # The page polls this, so the banner flips the moment a toggle does.

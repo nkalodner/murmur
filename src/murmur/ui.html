@@ -119,6 +119,13 @@
   button.withicon{display:inline-flex;align-items:center;gap:7px}
   button.withicon svg{flex:none}
   .count{font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:0;text-transform:none}
+  /* Word packs: a row each, with the terms they capture one click away. */
+  .linkish{background:none;border:none;padding:0;color:var(--accent-deep);font-size:12.5px;
+    font-family:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+  .packterms{padding:0 0 12px;border-bottom:1px solid var(--border)}
+  .packterms:last-child{border-bottom:none}
+  .grouplabel{display:block;font-family:var(--mono);font-size:10.5px;font-weight:700;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin-top:12px}
   .empty{font-size:13px;color:var(--faint);margin-top:10px}
 </style>
 </head>
@@ -252,6 +259,14 @@
   </div>
 
   <div class="tabpanel" id="tab-dictionary" role="tabpanel" aria-label="Dictionary">
+  <section>
+    <span class="kicker">Word packs</span>
+    <div class="panel">
+      <p class="hint">Curated dictionaries that ship with Murmur, so a team does not
+      each type out the same product names. Your own entries below always win.</p>
+      <div id="packs"></div>
+    </div>
+  </section>
   <section>
     <span class="kicker">Vocabulary <span class="count" id="vocabCount"></span></span>
     <div class="panel">
@@ -484,6 +499,85 @@ function renderSoundLevel() {
   $("muteCueRow").style.display = on ? "" : "none";
 }
 
+function chipList(labels) {
+  const wrap = document.createElement("div");
+  wrap.className = "chips";
+  for (const label of labels) {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = label;
+    wrap.appendChild(chip);
+  }
+  return wrap;
+}
+
+// One row per pack, plus the full term list a click away: switching a
+// dictionary on without being able to read it is a leap of faith.
+function renderPacks() {
+  const box = $("packs");
+  box.replaceChildren();
+  if (!packs.length) {
+    const none = document.createElement("span");
+    none.className = "empty";
+    none.textContent = "No word packs in this version of Murmur.";
+    box.appendChild(none);
+    return;
+  }
+  for (const pack of packs) {
+    const row = document.createElement("div");
+    row.className = "setting";
+    const left = document.createElement("span");
+    const name = document.createElement("span");
+    name.textContent = pack.name + " ";
+    const count = document.createElement("span");
+    count.className = "count";
+    count.textContent =
+      pack.vocabulary.length + " words, " + pack.replacements.length + " fixes";
+    const sub = document.createElement("span");
+    sub.className = "sub";
+    sub.textContent = pack.description + " ";
+    const peek = document.createElement("button");
+    peek.type = "button";
+    peek.className = "linkish";
+    peek.textContent = "Show terms";
+    sub.appendChild(peek);
+    left.append(name, count, sub);
+
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.checked = cfg.dictionary_packs.includes(pack.id);
+    check.addEventListener("change", () => {
+      const on = new Set(cfg.dictionary_packs);
+      if (check.checked) on.add(pack.id);
+      else on.delete(pack.id);
+      cfg.dictionary_packs = [...on];
+      setDirty(true);
+    });
+    row.append(left, check);
+
+    const terms = document.createElement("div");
+    terms.className = "packterms";
+    terms.hidden = true;
+    const wordsLabel = document.createElement("span");
+    wordsLabel.className = "grouplabel";
+    wordsLabel.textContent = "Words it knows how to spell";
+    const fixesLabel = document.createElement("span");
+    fixesLabel.className = "grouplabel";
+    fixesLabel.textContent = "Heard, then typed";
+    terms.append(
+      wordsLabel,
+      chipList(pack.vocabulary),
+      fixesLabel,
+      chipList(pack.replacements.map((r) => r.from + " \u2192 " + r.to)),
+    );
+    peek.addEventListener("click", () => {
+      terms.hidden = !terms.hidden;
+      peek.textContent = terms.hidden ? "Show terms" : "Hide terms";
+    });
+    box.append(row, terms);
+  }
+}
+
 function renderVocab() {
   const box = $("vocabChips");
   box.replaceChildren();
@@ -538,6 +632,7 @@ function renderPairs() {
 
 // The curated model menu arrives with /api/state; anything else is Custom.
 let models = [];
+let packs = [];
 
 function renderModelPicker() {
   const sel = $("modelSelect");
@@ -582,8 +677,10 @@ function renderAll(state) {
   cfg.replacements = (cfg.replacements || []).map((p) => ({ from: p.from || "", to: p.to || "" }));
   devices = state.devices || [];
   models = state.models || [];
+  packs = state.packs || [];
+  cfg.dictionary_packs = (cfg.dictionary_packs || []).filter((id) => typeof id === "string");
   renderHotkeys();
-  renderDevices(); renderVocab(); renderPairs();
+  renderDevices(); renderVocab(); renderPairs(); renderPacks();
   for (const id of ["sounds", "mute_start_cue", "paste", "trailing_space", "history", "pill", "formatting", "format_bare_times", "format_acronyms", "duck_audio", "remove_fillers", "update_check"]) $(id).checked = !!cfg[id];
   for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"]) $(id).value = cfg[id];
   $("threshold").value = cfg.vocab_threshold;
