@@ -116,9 +116,10 @@ def cue_path(name: str, directory: Path | None = None, volume: float = 1.0) -> P
 
 
 class Sounds:
-    def __init__(self, enabled: bool = True, volume: float = 1.0):
+    def __init__(self, enabled: bool = True, volume: float = 1.0, mute_start: bool = True):
         self.enabled = enabled
         self.volume = volume  # 0..1, the user's chime volume
+        self.mute_start = mute_start  # silence the mic while the start cue plays
         # Keyed by (cue, volume): a volume change renders a different file.
         self._paths: dict[tuple[str, float], Path] = {}
 
@@ -126,19 +127,25 @@ class Sounds:
         """How long the mic should ignore itself after this cue starts.
 
         Zero when nothing will actually sound, so muting the head of a take is
-        tied to a cue really playing rather than assumed.
+        tied to a cue really playing rather than assumed. Also zero when the
+        user has switched the muting off: on headphones the cue never reaches
+        the microphone, so the window is pure lost speech.
         """
         if not self.enabled or self.volume <= 0 or name not in CUES:
+            return 0.0
+        if not self.mute_start:
             return 0.0
         return duration(name) + TAIL_MARGIN
 
     def play(self, name: str, on_audible=None) -> None:
-        """Play a cue. `on_audible` fires just before the sound really starts.
+        """Play a cue. `on_audible` fires as close to the sound as we can get.
 
         Players do not begin the instant they are asked (spawning afplay, or
         filling PortAudio's buffer), so the caller gets this hook to re-anchor
-        a mic mute to the moment the cue becomes audible instead of padding
-        the window with a worst-case guess.
+        a mic mute late instead of padding the window with a worst-case guess.
+        Neither player reports when audio actually reaches the speaker, so it
+        fires just before the last blocking step and TAIL_MARGIN absorbs the
+        remainder.
         """
         if not self.enabled or self.volume <= 0 or name not in CUES:
             return

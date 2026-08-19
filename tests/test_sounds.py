@@ -182,3 +182,15 @@ def test_nothing_audible_means_nothing_muted():
     assert Sounds(enabled=False).bleed_seconds("start") == 0.0
     assert Sounds(volume=0.0).bleed_seconds("start") == 0.0
     assert Sounds().bleed_seconds("no-such-cue") == 0.0
+
+
+def test_mute_start_can_be_switched_off():
+    # On headphones the cue never reaches the mic, so the window is pure loss.
+    assert Sounds(mute_start=False).bleed_seconds("start") == 0.0
+    # ...and the cue itself still plays; only the muting goes away.
+    assert Sounds(mute_start=False).enabled is True
+
+
+def test_mute_start_defaults_to_on():
+    assert Sounds().mute_start is True
+    assert Sounds().bleed_seconds("start") > 0
