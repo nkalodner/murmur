@@ -2,7 +2,7 @@ import pytest
 
 from murmur.config import Config, validate
 from murmur.packs import PACKS, catalog, merge, unknown_ids
-from murmur.textproc import process
+from murmur.textproc import apply_vocabulary, process
 
 # Ordinary English that a vocabulary entry must never recase mid-sentence, and
 # that a replacement must never claim as its left side.
@@ -17,6 +17,9 @@ COMMON_WORDS = {
     "dashboard", "quota", "distribution", "widget", "ticket", "block",
     "branch", "scoring", "report", "reports", "logic", "flow", "list",
     "engagement", "pulse", "action", "workflow", "project",
+    # Words a product name can swallow by fuzzy match rather than by being
+    # spelled the same: "cross" into CrossXM, "table" into Tableau.
+    "cross", "customer", "employee", "table", "employees", "customers",
 }
 
 # Ordinary sentences a PM might dictate that contain no pack term at all. The
@@ -28,6 +31,8 @@ UNTOUCHED = [
     "send the list to the team and flag anything that looks off",
     "the logic here is that a shorter survey gets a better response",
     "i will action that after the sync and update the project",
+    "we can cross that bridge later once the brand team weighs in",
+    "let us table that until the customer tells us what employee morale is",
 ]
 
 
@@ -108,6 +113,23 @@ def test_pack_terms_avoid_ordinary_english():
             assert src == src.lower(), f"{pack.id}: {src!r} must be lowercase"
             if " " not in src:
                 assert src not in COMMON_WORDS, f"{pack.id}: {src}"
+
+
+def test_pack_vocabulary_does_not_fuzzy_match_ordinary_words():
+    # The subtler half of the rule above. An entry does not have to BE an
+    # ordinary word to rewrite one: snapping is fuzzy, so a product name that
+    # merely starts with a common word swallows it. "CrossXM" scores 0.833
+    # against "cross" and "Tableau" 0.833 against "table", both over the 0.82
+    # threshold, which is how five entries passed the string check above while
+    # still rewriting "we can cross that bridge" and "let us table that".
+    # Compare through the real matcher, because string equality cannot see it.
+    for pack in PACKS.values():
+        vocab = list(pack.vocabulary)
+        for word in sorted(COMMON_WORDS):
+            assert apply_vocabulary(word, vocab) == word, (
+                f"{pack.id}: dictating {word!r} types "
+                f"{apply_vocabulary(word, vocab)!r}"
+            )
 
 
 def test_pack_replacements_have_no_duplicate_sources():

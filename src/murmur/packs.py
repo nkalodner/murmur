@@ -36,8 +36,14 @@ QUALTRICS = Pack(
     name="Qualtrics",
     description="Product names, XM jargon, and the acronyms product managers say all day.",
     vocabulary=(
-        # Qualtrics products
-        "Qualtrics", "CoreXM", "CustomerXM", "EmployeeXM", "BrandXM", "CrossXM",
+        # Qualtrics products. The "<common word>XM" names are deliberately NOT
+        # here: vocabulary snapping is fuzzy, so "CrossXM" scores 0.833 against
+        # a spoken "cross" and "CustomerXM" 0.889 against "customer", well over
+        # the 0.82 threshold. Listing them turns "we can cross that bridge" into
+        # "we can CrossXM that bridge". They reach the same spelling through
+        # their replacement pairs below, which match exactly and cannot misfire.
+        # CoreXM only survives here because "core" scores 0.800 and misses.
+        "Qualtrics", "CoreXM",
         "XM Discover", "XM Directory", "Stats iQ", "Text iQ",
         # Platform features, named the way the support site titles them. All
         # multi-word on purpose: the single-word ones ("dashboard", "quota",
@@ -57,7 +63,9 @@ QUALTRICS = Pack(
         # also an ordinary word stays out: a vocabulary entry for "Slack" or
         # "Zoom" recases "some slack in the timeline" and "zoom in on the
         # funnel", and the model already spells those right as products.
-        "Jira", "Figma", "Miro", "Salesforce", "Tableau", "Looker",
+        # "Tableau" is out for the same reason: it scores 0.833 against a
+        # spoken "table", so it rewrites "let us table that".
+        "Jira", "Figma", "Miro", "Salesforce", "Looker",
         "Databricks", "Mixpanel", "Pendo", "Okta", "ServiceNow", "Zendesk",
         "HubSpot", "Marketo", "Datadog", "PagerDuty", "GitHub", "Airtable",
         "Asana", "Smartsheet", "BigQuery", "Redshift", "Kubernetes",
