@@ -152,7 +152,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 | Quick-tap Right Ctrl | Starts hands-free recording; tap again to finish |
 | Esc while recording | Cancels, nothing is pasted |
 
-The menu bar icon is a small retro microphone with sound waves coming off it, and it wears the state: white when idle (matching the other menu bar icons), red recording, amber transcribing, dimmed while loading or paused. Its menu covers the day-to-day without opening the settings page: switch the microphone, paste the last transcript, pause dictation, toggle Start at login, and quit. Short chimes confirm ready, start, stop, and cancel.
+The menu bar icon is a small retro microphone that wears the state: white when idle on a dark bar (dark ink on a light one, following your system appearance), red recording, amber transcribing, dimmed while loading or paused. Its menu covers the day-to-day without opening the settings page: switch the microphone, paste the last transcript, pause dictation, toggle Start at login, and quit. Short chimes confirm ready, start, stop, and cancel.
 
 Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches of audio are split at pauses and transcribed piece by piece. Every transcript is also appended to `~/.murmur/history.jsonl`, so pasting into the wrong window never loses your words.
 
@@ -274,6 +274,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
     Remove-Item -Recurse -Force "$env:APPDATA\uv\tools\murmur-dictation"
     ```
     If it still will not delete, reboot and run those lines before opening anything else. Your settings (`~/.murmur`) and the downloaded model are untouched.
+- **Hotkey suddenly does nothing (any platform)**: check the menu bar or tray menu for **Pause dictation**. Paused, Murmur ignores the hotkeys and the idle mic dims until you toggle it back.
 - **Hotkey does nothing (macOS)**: Input Monitoring permission is missing, or it was granted while Murmur was already running. The hotkey only attaches at launch, so the fix is always the same: grant it to your terminal (`murmur --doctor` and the settings page both confirm which state you are in), then quit Murmur and open it again. Granted it and it still does nothing? Restart the computer once; that clears every cached permission state.
 - **Nothing pastes (macOS)**: same story with the Accessibility permission.
 - **The hotkey or pasting stops after an update (macOS)**: macOS ties Input Monitoring and Accessibility to the exact program, and `uv tool install --reinstall` can reset them. Re-grant in System Settings > Privacy & Security; `murmur --doctor` shows what is missing.
