@@ -236,6 +236,7 @@
           <button id="testSound" type="button" class="withicon" title="Play the start cue at this volume"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>Play</button>
         </span>
       </div>
+      <label class="check setting nested" id="muteCueRow"><span>Keep the chime out of the take<span class="sub">Mutes the mic for the 0.26s the cue plays. Off on headphones, where it cannot be heard anyway, and the time goes back to your first word</span></span><input type="checkbox" id="mute_start_cue"></label>
     </div>
   </section>
   <section>
@@ -476,7 +477,11 @@ function renderDuckLevel() {
   $("duckLevelRow").style.display = canDuck && $("duck_audio").checked ? "" : "none";
 }
 function renderSoundLevel() {
-  $("soundLevelRow").style.display = $("sounds").checked ? "" : "none";
+  // Both rows only matter while chimes are on: nothing plays, so nothing can
+  // bleed into the take either.
+  const on = $("sounds").checked;
+  $("soundLevelRow").style.display = on ? "" : "none";
+  $("muteCueRow").style.display = on ? "" : "none";
 }
 
 function renderVocab() {
@@ -579,7 +584,7 @@ function renderAll(state) {
   models = state.models || [];
   renderHotkeys();
   renderDevices(); renderVocab(); renderPairs();
-  for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "format_bare_times", "format_acronyms", "duck_audio", "remove_fillers", "update_check"]) $(id).checked = !!cfg[id];
+  for (const id of ["sounds", "mute_start_cue", "paste", "trailing_space", "history", "pill", "formatting", "format_bare_times", "format_acronyms", "duck_audio", "remove_fillers", "update_check"]) $(id).checked = !!cfg[id];
   for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"]) $(id).value = cfg[id];
   $("threshold").value = cfg.vocab_threshold;
   $("thresholdVal").textContent = Number(cfg.vocab_threshold).toFixed(2);
@@ -740,7 +745,7 @@ $("pairAdd").addEventListener("click", () => {
   if (rows.length) rows[rows.length - 2].focus();
 });
 
-for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "format_bare_times", "format_acronyms", "duck_audio", "remove_fillers", "update_check"])
+for (const id of ["sounds", "mute_start_cue", "paste", "trailing_space", "history", "pill", "formatting", "format_bare_times", "format_acronyms", "duck_audio", "remove_fillers", "update_check"])
   $(id).addEventListener("change", () => { cfg[id] = $(id).checked; setDirty(true); });
 $("formatting").addEventListener("change", renderFormatRules);
 $("duck_audio").addEventListener("change", renderDuckLevel);

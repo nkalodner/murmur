@@ -46,7 +46,7 @@ class App:
         self._device = find_input_device(cfg.device)
         self.recorder = Recorder(self._device)
         self.transcriber = Transcriber(cfg.model, cfg.quantization, cfg.language)
-        self.sounds = Sounds(cfg.sounds, cfg.sound_volume / 100)
+        self.sounds = Sounds(cfg.sounds, cfg.sound_volume / 100, cfg.mute_start_cue)
         self.injector = Injector(cfg.paste, cfg.restore_clipboard_ms, self._hotkey_down)
         self.listener = None  # created in run()
         self.tray = None
@@ -374,6 +374,7 @@ class App:
             self.cfg = new
             self.sounds.enabled = new.sounds
             self.sounds.volume = new.sound_volume / 100
+            self.sounds.mute_start = new.mute_start_cue
             self.injector.paste = new.paste
             self.injector.restore_clipboard_ms = new.restore_clipboard_ms
             if new.device != old.device:

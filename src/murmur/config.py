@@ -28,6 +28,9 @@ class Config:
     device: str | None = None  # input device name substring; null = system default mic
     sounds: bool = True
     sound_volume: int = 100  # chime loudness, 0-100 percent; 0 is silent
+    # The start cue plays while the mic is open, so it can land in the take.
+    # Muting costs the first ~0.26s of speech, which buys nothing on headphones.
+    mute_start_cue: bool = True
     paste: bool = True  # false = type character by character instead of pasting
     restore_clipboard_ms: int = 600  # delay before restoring the previous clipboard; -1 = never restore
     tap_lock_ms: int = 350  # a press shorter than this locks hands-free recording
@@ -217,7 +220,7 @@ def validate(cfg: Config) -> None:
         value = getattr(cfg, name)
         if value is not None and not isinstance(value, str):
             raise ValueError(f"{name} must be a string or null")
-    for name in ("sounds", "paste", "trailing_space", "history", "pill", "formatting",
+    for name in ("sounds", "mute_start_cue", "paste", "trailing_space", "history", "pill", "formatting",
                  "format_bare_times", "format_acronyms",
                  "duck_audio", "remove_fillers", "update_check"):
         if not isinstance(getattr(cfg, name), bool):
