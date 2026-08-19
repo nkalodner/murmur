@@ -151,6 +151,23 @@ def test_plain_amounts_still_convert(said, written):
     assert format_speech(said) == written
 
 
+def test_bare_times_can_be_switched_off():
+    said = "meet at four thirty about the W S A launch"
+    assert format_speech(said, bare_times=False) == "meet at four thirty about the WSA launch"
+
+
+def test_acronyms_can_be_switched_off():
+    said = "meet at four thirty about the W S A launch"
+    assert format_speech(said, acronyms=False) == "meet at 4:30 about the W S A launch"
+
+
+def test_the_conservative_rules_survive_both_switches():
+    # Turning the interpretive rules off must leave the unambiguous ones on.
+    said = "one pm on july third, up fifty percent"
+    both_off = format_speech(said, bare_times=False, acronyms=False)
+    assert both_off == format_speech(said) == "1:00 PM on July 3rd, up 50%"
+
+
 def test_no_crashes_on_fuzz():
     words = ["one", "two", "twenty", "five", "thirty", "oh", "am", "pm", "a.m.",
              "p.m.", "hundred", "percent", "dollars", "july", "third", "o'clock",

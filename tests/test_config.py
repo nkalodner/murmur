@@ -49,6 +49,8 @@ def test_validate_accepts_defaults():
     Config(vocab_threshold=0.4),     # below 0.5
     Config(vocab_threshold=True),    # bool is not a number
     Config(sounds="yes"),            # not a bool
+    Config(format_bare_times="yes"), # not a bool
+    Config(format_acronyms=1),       # not a bool
     Config(vocabulary=[1, 2]),       # not strings
     Config(replacements=["nope"]),   # not {from,to} dicts
 ])

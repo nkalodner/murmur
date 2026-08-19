@@ -251,6 +251,8 @@ class App:
                     vocabulary=cfg.vocabulary,
                     vocab_threshold=cfg.vocab_threshold,
                     formatting=cfg.formatting,
+                    format_bare_times=cfg.format_bare_times,
+                    format_acronyms=cfg.format_acronyms,
                     remove_fillers=cfg.remove_fillers,
                     filler_words=cfg.filler_words,
                     trailing_space=cfg.trailing_space,

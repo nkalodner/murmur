@@ -222,7 +222,7 @@ def _amount(raw: str) -> int:
     return _word_num(raw)
 
 
-def format_speech(text: str) -> str:
+def format_speech(text: str, *, bare_times: bool = True, acronyms: bool = True) -> str:
     def time_sub(m: re.Match) -> str:
         mer = m.group("mer").upper() + "M"
         if mer == "AM" and not m.group("dots"):
@@ -294,13 +294,15 @@ def format_speech(text: str) -> str:
     # Acronyms join first so a spelled "P M" reads as a meridiem to the time
     # rules; explicit am/pm times go before bare ones; years before bare
     # times and compounds so "twenty twenty six" is never split up.
-    text = _ACRONYM.sub(acronym_sub, text)
+    if acronyms:
+        text = _ACRONYM.sub(acronym_sub, text)
     text = _TIME.sub(time_sub, text)
     text = _OCLOCK.sub(oclock_sub, text)
     text = _MONTH_DAY.sub(month_day_sub, text)
     text = _DAY_OF_MONTH.sub(day_of_month_sub, text)
     text = _YEAR.sub(year_sub, text)
-    text = _BARE_TIME.sub(bare_time_sub, text)
+    if bare_times:
+        text = _BARE_TIME.sub(bare_time_sub, text)
     def amount_sub(fmt: str):
         def sub(m: re.Match) -> str:
             if _neighbors(m)[0] in _AMOUNT_BEFORE:
