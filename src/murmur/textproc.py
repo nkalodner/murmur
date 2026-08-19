@@ -82,6 +82,38 @@ def _is_ordinary(window: list[str]) -> bool:
     return all(_norm(t) in COMMON_WORDS for t in window)
 
 
+def _rewrites_a_common_word(window: list[str], entry_words: list[str]) -> bool:
+    """True when a match would turn an ordinary word into a different one.
+
+    Fuzzy matching is for jargon the model spelled wrong, never for the plain
+    words around it. A two-letter entry word sits within the threshold of any
+    two-letter function word, so "Text iQ" matched "Text in" and typed
+    "Piped Text iQ the link" — the preposition simply gone. Aligning the
+    window to the entry catches that: an ordinary word may match itself, and
+    may never be rewritten into something else.
+    """
+    if len(window) != len(entry_words):
+        return False  # only meaningful when the two line up word for word
+    for token, word in zip(window, entry_words):
+        norm = _norm(token)
+        if norm in COMMON_WORDS and norm != _norm(word):
+            return True
+    return False
+
+
+def _ratio_at_least(a: str, b: str, floor: float) -> bool:
+    """`SequenceMatcher(a, b).ratio() >= floor`, without always paying for it.
+
+    ratio() is the expensive call and it runs for every entry at every token
+    position, which is what made a large vocabulary (a word pack is dozens of
+    entries on its own) cost real time on every transcript. real_quick_ratio
+    and quick_ratio are documented upper bounds on ratio, so a floor they
+    already fail is a floor ratio cannot reach: same answer, far less work.
+    """
+    m = SequenceMatcher(None, a, b)
+    return m.real_quick_ratio() >= floor and m.quick_ratio() >= floor and m.ratio() >= floor
+
+
 def apply_vocabulary(
     text: str, vocabulary: list[str], threshold: float = DEFAULT_VOCAB_THRESHOLD
 ) -> str:
@@ -99,22 +131,36 @@ def apply_vocabulary(
         norm_space = " ".join(p for p in parts if p)
         norm_joined = "".join(parts)
         if norm_joined:
-            prepared.append((entry, len(entry.split()), norm_space, norm_joined))
+            prepared.append(
+                (entry, len(entry.split()), norm_space, norm_joined, entry.split())
+            )
 
     out: list[str] = []
     i = 0
     while i < len(tokens):
         best = None  # (window_size, entry, lead, trail)
-        for entry, k, norm_space, norm_joined in prepared:
+        # Every entry probes the same handful of windows at this position, so
+        # normalize each one once instead of once per entry.
+        windows: dict = {}
+
+        def window_at(w: int, at: int = 0):
+            if w not in windows:
+                window = tokens[i : i + w]
+                parts = [_norm(t) for t in window]
+                windows[w] = (
+                    window,
+                    " ".join(p for p in parts if p),
+                    "".join(parts),
+                )
+            return windows[w]
+
+        for entry, k, norm_space, norm_joined, entry_words in prepared:
             # A phrase said with one word more or fewer still matches
             # ("photo globe" -> "Photoglobe"), so try nearby window sizes.
             for w in dict.fromkeys([k, k + 1, k - 1]):
                 if w < 1 or i + w > len(tokens):
                     continue
-                window = tokens[i : i + w]
-                win_parts = [_norm(t) for t in window]
-                win_space = " ".join(p for p in win_parts if p)
-                win_joined = "".join(win_parts)
+                window, win_space, win_joined = window_at(w)
                 if not win_joined:
                     continue
                 exact = win_joined == norm_joined
@@ -125,25 +171,28 @@ def apply_vocabulary(
                 if len(norm_joined) < 3:
                     matched = exact
                 elif w == k:
-                    matched = (
-                        max(
-                            SequenceMatcher(None, win_space, norm_space).ratio(),
-                            SequenceMatcher(None, win_joined, norm_joined).ratio(),
-                        )
-                        >= floor
+                    matched = _ratio_at_least(win_space, norm_space, floor) or (
+                        _ratio_at_least(win_joined, norm_joined, floor)
                     )
+                elif _norm(window[0]) in COMMON_WORDS or _norm(window[-1]) in COMMON_WORDS:
+                    # An off-size window eats or drops a word at one end, and
+                    # a one-letter neighbour barely moves the ratio: "a matrix
+                    # table" joins to within 0.96 of "matrixtable", so the
+                    # article was being deleted. A boundary word this ordinary
+                    # is never part of the phrase someone meant.
+                    matched = False
                 else:
                     # An off-size window absorbs or drops a whole word, so it
                     # must be a near-exact join ("photo globe" -> "Photoglobe"),
                     # or short neighbors get eaten ("to kalodner" -> "Kalodner").
-                    matched = (
-                        SequenceMatcher(None, win_joined, norm_joined).ratio()
-                        >= max(floor, 0.95)
-                    )
+                    matched = _ratio_at_least(win_joined, norm_joined, max(floor, 0.95))
                 # Never rewrite a run of ordinary spoken words, even when they
                 # happen to concatenate to an entry ("and" + "I" -> "andi").
                 # Vocabulary is for names and jargon, not everyday speech.
                 if matched and _is_ordinary(window):
+                    matched = False
+                # ...and never rewrite one ordinary word into a different one.
+                if matched and _rewrites_a_common_word(window, entry_words):
                     matched = False
                 if matched:
                     lead = re.match(r"^[^\w']*", window[0]).group(0)

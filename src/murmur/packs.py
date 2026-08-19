@@ -40,6 +40,14 @@ QUALTRICS = Pack(
         "Qualtrics", "CoreXM", "CustomerXM", "EmployeeXM", "BrandXM", "DesignXM",
         "XM Discover", "XM Directory", "Stats iQ", "Text iQ", "Driver iQ",
         "Predict iQ", "CrossXM",
+        # Platform features, named the way the support site titles them. All
+        # multi-word on purpose: the single-word ones ("dashboard", "quota",
+        # "distribution", "widget", "ticket", "branch") are ordinary English
+        # that a vocabulary entry would recase mid-sentence.
+        "Survey Flow", "Display Logic", "Skip Logic", "Embedded Data",
+        "Piped Text", "Question Block", "Matrix Table", "Constant Sum",
+        "Net Promoter Score", "Contact List", "Anonymous Link",
+        "Employee Lifecycle", "Ad Hoc Employee Research",
         # Measures
         "NPS", "eNPS", "CSAT", "CES",
         # The product-management vocabulary
@@ -61,6 +69,7 @@ QUALTRICS = Pack(
         ("quall tricks", "Qualtrics"),
         ("qual tricks", "Qualtrics"),
         ("qualtricks", "Qualtrics"),
+        ("qualtrix", "Qualtrics"),
         # Spelled letters the model writes apart, joined the way the product is
         # actually written. These run before auto-format, so they win over the
         # generic acronym rule that would give "XM" alone.
@@ -91,6 +100,11 @@ QUALTRICS = Pack(
         ("sev one", "Sev1"),
         ("sev two", "Sev2"),
         ("sock two", "SOC 2"),
+        ("pipe text", "Piped Text"),
+        # Longest first: pairs apply in order, so "three sixty" would otherwise
+        # match inside "three sixty five" and leave "360 five".
+        ("three sixty five", "365"),
+        ("three sixty", "360"),
         ("fed ramp", "FedRAMP"),
         ("single sign on", "single sign-on"),
         ("road map", "roadmap"),

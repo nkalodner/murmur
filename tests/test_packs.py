@@ -11,7 +11,24 @@ COMMON_WORDS = {
     "amplitude", "workday", "snowflake", "confluence", "the", "and", "sync",
     "stand", "up", "test", "brand", "design", "core", "text", "driver",
     "predict", "discover", "directory", "response", "survey", "feedback",
+    # Qualtrics feature nouns that are also ordinary English. They belong in
+    # the pack only as part of a multi-word phrase ("Question Block"), never
+    # on their own, or the pack recases everyday sentences.
+    "dashboard", "quota", "distribution", "widget", "ticket", "block",
+    "branch", "scoring", "report", "reports", "logic", "flow", "list",
+    "engagement", "pulse", "action", "workflow", "project",
 }
+
+# Ordinary sentences a PM might dictate that contain no pack term at all. The
+# pack must be completely invisible on these.
+UNTOUCHED = [
+    "we should block off time to review the report before the meeting",
+    "the branch is ready and the ticket is closed",
+    "there is some slack in the timeline so let us zoom in on the funnel",
+    "send the list to the team and flag anything that looks off",
+    "the logic here is that a shorter survey gets a better response",
+    "i will action that after the sync and update the project",
+]
 
 
 def test_catalog_shape():
@@ -97,3 +114,38 @@ def test_pack_replacements_have_no_duplicate_sources():
     for pack in PACKS.values():
         sources = [src for src, _ in pack.replacements]
         assert len(sources) == len(set(sources)), f"{pack.id} repeats a source"
+
+
+def test_a_pack_is_invisible_on_ordinary_speech():
+    # The failure that makes a pack unshippable: it fires on sentences that
+    # have nothing to do with the domain.
+    vocab, pairs = merge(["qualtrics"], [], [])
+    for text in UNTOUCHED:
+        assert process(text, vocabulary=vocab, replacements=pairs).strip() == text
+
+
+def test_a_pack_never_loses_a_word_it_did_not_mean_to():
+    # Vocabulary snapping fixes spelling; it must not delete the words around
+    # what it fixed. (Replacements may join words, so they are excluded here.)
+    vocab, _ = merge(["qualtrics"], [], [])
+    said = [
+        "a matrix table with display logic in the second question block",
+        "put the embedded data at the top of the survey flow",
+        "an anonymous link and a contact list for the pilot",
+        "text iq and stats iq both run nightly",
+    ]
+    for text in said:
+        out = process(text, vocabulary=vocab).strip()
+        assert len(out.split()) == len(text.split()), f"{text!r} -> {out!r}"
+
+
+def test_longer_replacements_win_over_the_shorter_ones_they_contain():
+    # Pairs apply in order, so "three sixty" ahead of "three sixty five" would
+    # leave "360 five".
+    _, pairs = merge(["qualtrics"], [], [])
+    assert process("the three sixty five day curve", replacements=pairs).strip() == (
+        "the 365 day curve"
+    )
+    assert process("kicking off a three sixty", replacements=pairs).strip() == (
+        "kicking off a 360"
+    )
