@@ -40,6 +40,11 @@
   .setting>span:first-child{color:var(--fg);font-size:14.5px}
   .setting .sub{display:block;font-size:12.5px;color:var(--muted);margin-top:1px}
   label.check{cursor:pointer}
+  /* Sub-settings of the row above: indented, quieter, and dimmed out when
+     their parent switch is off. */
+  .setting.nested{padding-left:18px}
+  .setting.nested>span:first-child{font-size:13.5px}
+  .setting.nested.off{opacity:.45}
   input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);flex:none}
   input[type=text],input[type=number],select{
     background:var(--field);border:1px solid var(--border);color:var(--fg);
@@ -202,7 +207,9 @@
   <section>
     <span class="kicker">What gets typed</span>
     <div class="panel">
-      <label class="check setting"><span>Auto-format speech<span class="sub">Spoken times, dates, numbers, and acronyms come out written</span></span><input type="checkbox" id="formatting"></label>
+      <label class="check setting"><span>Auto-format speech<span class="sub">Spoken times, dates, and numbers come out written</span></span><input type="checkbox" id="formatting"></label>
+      <label class="check setting nested"><span>Times without am or pm<span class="sub">"four thirty" types as 4:30</span></span><input type="checkbox" id="format_bare_times"></label>
+      <label class="check setting nested"><span>Spelled-out letters<span class="sub">"W S A" types as WSA</span></span><input type="checkbox" id="format_acronyms"></label>
       <label class="check setting"><span>Drop filler words<span class="sub">"um" and "uh" are never typed</span></span><input type="checkbox" id="remove_fillers"></label>
       <label class="check setting"><span>Trailing space<span class="sub">Consecutive dictations flow together</span></span><input type="checkbox" id="trailing_space"></label>
     </div>
@@ -455,6 +462,16 @@ function renderDevices() {
 }
 
 let canDuck = false;
+// The two auto-format sub-rules only mean anything while the parent switch
+// is on, so they dim and stop responding with it.
+function renderFormatRules() {
+  const on = $("formatting").checked;
+  for (const id of ["format_bare_times", "format_acronyms"]) {
+    $(id).disabled = !on;
+    $(id).closest(".setting").classList.toggle("off", !on);
+  }
+}
+
 function renderDuckLevel() {
   $("duckLevelRow").style.display = canDuck && $("duck_audio").checked ? "" : "none";
 }
@@ -562,10 +579,11 @@ function renderAll(state) {
   models = state.models || [];
   renderHotkeys();
   renderDevices(); renderVocab(); renderPairs();
-  for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "duck_audio", "remove_fillers", "update_check"]) $(id).checked = !!cfg[id];
+  for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "format_bare_times", "format_acronyms", "duck_audio", "remove_fillers", "update_check"]) $(id).checked = !!cfg[id];
   for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"]) $(id).value = cfg[id];
   $("threshold").value = cfg.vocab_threshold;
   $("thresholdVal").textContent = Number(cfg.vocab_threshold).toFixed(2);
+  renderFormatRules();
   $("duck_percent").value = cfg.duck_percent;
   $("duckPercentVal").textContent = cfg.duck_percent + "%";
   $("sound_volume").value = cfg.sound_volume;
@@ -722,8 +740,9 @@ $("pairAdd").addEventListener("click", () => {
   if (rows.length) rows[rows.length - 2].focus();
 });
 
-for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "duck_audio", "remove_fillers", "update_check"])
+for (const id of ["sounds", "paste", "trailing_space", "history", "pill", "formatting", "format_bare_times", "format_acronyms", "duck_audio", "remove_fillers", "update_check"])
   $(id).addEventListener("change", () => { cfg[id] = $(id).checked; setDirty(true); });
+$("formatting").addEventListener("change", renderFormatRules);
 $("duck_audio").addEventListener("change", renderDuckLevel);
 $("sounds").addEventListener("change", renderSoundLevel);
 $("duck_percent").addEventListener("input", () => {

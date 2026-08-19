@@ -171,6 +171,8 @@ def process(
     vocabulary: list[str] | None = None,
     vocab_threshold: float = DEFAULT_VOCAB_THRESHOLD,
     formatting: bool = True,
+    format_bare_times: bool = True,
+    format_acronyms: bool = True,
     remove_fillers: bool = True,
     filler_words=None,
     trailing_space: bool = True,
@@ -187,5 +189,7 @@ def process(
     if formatting:
         from murmur.formatting import format_speech
 
-        text = format_speech(text)
+        text = format_speech(
+            text, bare_times=format_bare_times, acronyms=format_acronyms
+        )
     return clean(text, trailing_space)

@@ -36,6 +36,10 @@ class Config:
     history: bool = True  # append transcripts to ~/.murmur/history.jsonl
     pill: bool = True  # show the floating recording pill (Windows/Linux)
     formatting: bool = True  # spoken times/dates/numbers/acronyms -> written forms (4:30, WSA)
+    # The two rules that interpret rather than transcribe, nested under
+    # `formatting` so one switch still turns the whole thing off.
+    format_bare_times: bool = True  # "four thirty" -> 4:30, with no am/pm said
+    format_acronyms: bool = True  # spelled-out letters join up: "W S A" -> WSA
     duck_audio: bool = False  # turn other audio down while recording (macOS/Windows)
     duck_percent: int = 20  # output volume to duck to, as a percentage
     remove_fillers: bool = True  # drop "um"/"uh" from transcripts before pasting
@@ -214,6 +218,7 @@ def validate(cfg: Config) -> None:
         if value is not None and not isinstance(value, str):
             raise ValueError(f"{name} must be a string or null")
     for name in ("sounds", "paste", "trailing_space", "history", "pill", "formatting",
+                 "format_bare_times", "format_acronyms",
                  "duck_audio", "remove_fillers", "update_check"):
         if not isinstance(getattr(cfg, name), bool):
             raise ValueError(f"{name} must be true or false")
