@@ -68,11 +68,11 @@ LABELS = {
 
 
 def render_icon(state: str, size: int = 64, theme: str = "dark"):
-    """The tray mark: a retro broadcast mic in the state color — slatted
-    capsule, cradle arc, stem, base, one sound wave off each side. Drawn 4x on
-    a 256 grid and downscaled so the curves stay smooth at menu-bar sizes;
-    loading and paused read as the same mic, dimmed. The slats are punched
-    through the capsule's alpha so they stay crisp on any background."""
+    """The tray mark: a retro broadcast mic in the state color — a capsule
+    with three slats, cradle arc, stem, base. Drawn 4x on a 256 grid and
+    downscaled so the curves stay smooth at menu-bar sizes; loading and
+    paused read as the same mic, dimmed. The slats are punched through the
+    capsule's alpha so they stay crisp on any background."""
     import numpy as np
     from PIL import Image, ImageDraw
 
@@ -89,14 +89,9 @@ def render_icon(state: str, size: int = 64, theme: str = "dark"):
     draw.arc(box(76, 62, 180, 166), start=0, end=180, fill=white, width=int(17 * u))
     draw.rounded_rectangle(box(120, 170, 136, 198), radius=8 * u, fill=white)
     draw.rounded_rectangle(box(86, 200, 170, 216), radius=8 * u, fill=white)
-    # one wave per side, centered on the capsule; two per side smear at 22px
-    cx, cy, r = 128, 88, 86
-    for a0, a1 in ((-28, 28), (152, 208)):
-        draw.arc(box(cx - r, cy - r, cx + r, cy + r), start=a0, end=a1,
-                 fill=white, width=int(13 * u))
     arr = np.array(layer)
-    for y in (58, 79, 100, 121):  # the retro slats, capsule-width only
-        arr[int((y - 4) * u):int((y + 4) * u), int(106 * u):int(150 * u), 3] = 0
+    for y in (66, 88, 110):  # the retro slats, capsule-width only
+        arr[int((y - 5) * u):int((y + 5) * u), int(106 * u):int(150 * u), 3] = 0
     img = Image.fromarray(arr).resize((size, size), Image.LANCZOS)
     color = _color(state, theme)
     out = np.array(img).astype(np.uint16)
