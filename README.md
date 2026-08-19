@@ -250,7 +250,9 @@ Curated dictionaries that ship with Murmur, on the Dictionary tab. Switch one on
 
 Packs never touch your own vocabulary and replacements. They are merged in when a transcript is processed, with **your entries first**, so a personal fix always beats a pack's and nothing a pack ships can end up in your export as if you had typed it. Turning a pack off takes its terms with it, and updating Murmur updates the pack. In the config the setting is a list of ids: `"dictionary_packs": ["qualtrics"]`.
 
-Anything that is also an ordinary English word stays out of a pack on purpose. A vocabulary entry for "Slack" would recase "some slack in the timeline", and one for "Zoom" would recase "zoom in on the funnel", so those are left to the model, which already spells them right as product names. The same rule is why the platform features are all multi-word: "Question Block" is in, "block" on its own is not. A test dictates ordinary sentences full of those words and fails if the pack touches any of them.
+Anything that is also an ordinary English word stays out of a pack on purpose. A vocabulary entry for "Slack" would recase "some slack in the timeline", and one for "Zoom" would recase "zoom in on the funnel", so those are left to the model, which already spells them right as product names. The same rule is why the platform features are all multi-word: "Question Block" is in, "block" on its own is not.
+
+A product name does not have to be spelled like an everyday word to swallow one. Vocabulary snapping is fuzzy, so a name that merely starts with a common word is close enough to catch it: "CrossXM" would rewrite "we can cross that bridge", and "Tableau" would rewrite "let us table that". Those names live in the pack as exact heard-to-typed pairs instead, so saying "cross x m" still types `CrossXM` while the everyday word passes through untouched. Two tests hold the line, one dictating ordinary sentences full of the pack's near-miss words and one running every common word through the real matcher.
 
 #### Your own words
 
