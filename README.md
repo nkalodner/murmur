@@ -38,7 +38,7 @@ by itself on the first launch.
 <details>
 <summary><b>Or install it step by step</b></summary>
 
-You need [uv](https://docs.astral.sh/uv/), which installs and manages Python for you, and git.
+You need [uv](https://docs.astral.sh/uv/), which installs and manages Python for you. That is the only prerequisite; there is nothing to clone and no git to install.
 
 **1. Install uv** (once per computer). On macOS:
 
@@ -54,11 +54,10 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 **2. Open a new terminal window.** Close the one you just used and open a fresh one; only a new window knows where uv landed, so the next step is typed there.
 
-**3. Clone this repo, install it, and run it** (either platform):
+**3. Install Murmur and run it** (either platform). The address is GitHub's zip of the latest `main`, so it always serves the current version:
 
 ```bash
-git clone https://github.com/nkalodner/murmur.git
-uv tool install ./murmur
+uv tool install https://github.com/nkalodner/murmur/archive/refs/heads/main.zip
 murmur
 ```
 
@@ -68,6 +67,7 @@ Notes:
 
 - If `murmur` is not found after install, run `uv tool update-shell` and open a fresh terminal.
 - **To update: `murmur --update`.** Quit Murmur first, since a running copy holds its own files open; the command says so rather than failing halfway if you forget. [What's new](#whats-new) lists what changed in each version; if it errors out, see [Troubleshooting](#troubleshooting).
+- **If `murmur --update` comes back as an unrecognized argument**, the installed copy predates 0.12.0, which is where that command arrived. Run the install line above again. It installs over the old copy, keeps your settings and saved words, and `murmur --update` works from then on.
 - To remove: `uv tool uninstall murmur-dictation`, then delete `~/.murmur` and the model in `~/.cache/huggingface`.
 
 ### First run
@@ -355,8 +355,9 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 ## Troubleshooting
 
 - **`uv tool install` fails with "Permission denied" on `~/.cache`** (macOS/Linux): the cache directory is owned by root, usually left behind by an earlier `sudo`. Take it back with `sudo chown -R "$(whoami)" ~/.cache` (and `~/.local` if that one complains too), then reinstall.
+- **`murmur --update` is not a recognized argument**: that command arrived in 0.12.0, so a copy older than that has no `--update` to run. Run the [install](#install) line again. It installs over the old copy and keeps your settings and saved words.
 - **A reinstall fails with "Invalid environment ... missing Python executable", or "Access is denied" on Windows**: uv cannot repair the tool's environment in place, either because it was left half-written (the managed Python it used moved) or because Murmur is still running and Windows has its files locked. Quit Murmur completely first: right-click the tray or menu-bar icon and choose Quit (if it starts at login it may be running on its own). Then remove it and install fresh:
-  - Any platform: `uv tool uninstall murmur-dictation`, then run your install line again (`uv tool install ./murmur`, or the archive URL if that is how you installed).
+  - Any platform: `uv tool uninstall murmur-dictation`, then `uv tool install https://github.com/nkalodner/murmur/archive/refs/heads/main.zip`.
   - Windows, if the uninstall still reports "Access is denied": a copy is still holding the files. Stop it and clear the folder in PowerShell, then install again:
     ```powershell
     Get-Process murmur*,python*,pythonw* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*uv\tools\murmur-dictation*" } | Stop-Process -Force
