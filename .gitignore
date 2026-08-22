@@ -5,4 +5,8 @@ venv/
 dist/
 build/
 *.egg-info/
-uv.lock
+
+# uv.lock is committed on purpose. It does not change what end users get
+# (`uv tool install` resolves from the archive's declared ranges and ignores a
+# lock), but it pins the versions CI tests against and gives Dependabot exact
+# versions to match advisories on instead of open-ended ranges.
