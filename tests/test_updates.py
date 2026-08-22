@@ -154,6 +154,11 @@ def test_self_update_refuses_while_murmur_is_running(monkeypatch, capsys):
     # with a permission error nobody can read. Ask instead.
     from murmur.singleton import InstanceLock
 
+    # self_update() looks for uv before it looks at the lock, so without this
+    # stub the test passes or fails on whether the machine happens to have uv
+    # installed: green on a dev box, red on a CI runner that has no uv.
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+
     lock = InstanceLock()
     assert lock.acquire()
     try:
