@@ -775,13 +775,21 @@ def _should_detach(args) -> bool:
     return sys.stderr is not None
 
 
-def _relaunch_detached(argv: list[str] | None) -> bool:
-    """Start Murmur windowless with these same arguments. True if it started."""
+def _relaunch_detached(argv: list[str] | None, open_settings: bool = False) -> bool:
+    """Start Murmur windowless with these same arguments. True if it started.
+
+    open_settings carries a first run across the handoff: load() has already
+    written the default config by the time we get here, so the child cannot
+    tell it is a first run on its own and would leave a new user at a bare
+    tray icon.
+    """
     import shutil
     import subprocess
     from pathlib import Path
 
     passthrough = list(argv if argv is not None else sys.argv[1:])
+    if open_settings and "--settings" not in passthrough:
+        passthrough.append("--settings")
     launcher = shutil.which("murmurw") or shutil.which("murmur")
     if launcher:
         cmd = [launcher, "--foreground", *passthrough]
@@ -1073,7 +1081,7 @@ def main(argv: list[str] | None = None) -> int:
     # to the windowless copy and gives the prompt straight back. --foreground
     # opts out, and -v / --no-tray imply it, since both exist to watch what it
     # is doing.
-    if _should_detach(args) and _relaunch_detached(argv):
+    if _should_detach(args) and _relaunch_detached(argv, open_settings=first_run):
         print("Murmur is running in the background.")
         print("Close this terminal whenever you like; quit it from the tray icon.")
         return 0

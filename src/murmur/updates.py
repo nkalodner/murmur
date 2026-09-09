@@ -298,7 +298,9 @@ def _reinstall_here(uv: str, source: str, restart: bool = False) -> int:
     launcher = _launcher() if restart else None
     if launcher:
         try:
-            subprocess.Popen([launcher], start_new_session=True)
+            # start_new_session already detaches it; --foreground stops it
+            # bouncing through the handoff a second time on the way up.
+            subprocess.Popen([launcher, "--foreground"], start_new_session=True)
             print(_updated_line(True))
         except Exception as e:  # noqa: BLE001 - it updated; only the relaunch failed
             log.debug("relaunch failed: %s", e)
@@ -335,6 +337,9 @@ def _reinstall_detached(uv: str, source: str, restart: bool = False) -> int:
     script = "; ".join(
         [
             f"Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue",
+            # The uv trampoline that launched us outlives the python it ran
+            # by a beat, and uv is about to overwrite that very file.
+            "Start-Sleep -Milliseconds 500",
             " ".join(
                 [f"& {q(uv)} tool install --force --reinstall"]
                 # The flag is a literal; only its value needs quoting.
