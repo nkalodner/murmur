@@ -20,7 +20,18 @@ def run(cfg: Config) -> int:
     from murmur.config import hotkey_specs
 
     hotkeys = " or ".join(hotkey_specs(cfg)) or "none set"
+    from murmur.models import detects_language, languages_for
+
+    # Blank means detect on Whisper and English on Canary, so say which,
+    # rather than printing a bare "auto" that is wrong half the time.
+    if not languages_for(cfg.model):
+        language = "n/a for this model"
+    elif cfg.language:
+        language = cfg.language
+    else:
+        language = "auto-detect" if detects_language(cfg.model) else "en (this model has no detect)"
     print(f"  model: {cfg.model} ({cfg.quantization or 'fp32'})  hotkey: {hotkeys}")
+    print(f"  language: {language}")
     print(
         f"  dictionary: {len(cfg.vocabulary)} words, {len(cfg.replacements)} replacements"
         "  (move it with --export-dictionary / --import-dictionary)"
