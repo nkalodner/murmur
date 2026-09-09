@@ -162,6 +162,56 @@ def check_in_background() -> None:
     threading.Thread(target=run, name="murmur-update-check", daemon=True).start()
 
 
+def stop_running_instance(timeout: float = 15.0) -> bool:
+    """Ask a running Murmur to quit and wait for it to let go of the lock.
+
+    True when nothing holds the lock any more, which includes the case where
+    nothing was running to begin with. The wait matters: uv must not start
+    replacing files until the old process is genuinely gone.
+    """
+    import urllib.request
+
+    from murmur.server import find_running_instance
+    from murmur.singleton import InstanceLock
+
+    url = find_running_instance()
+    if url:
+        try:
+            req = urllib.request.Request(
+                f"{url}/api/quit",
+                data=b"{}",
+                headers={"Content-Type": "application/json", "X-Murmur": "1"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=5).read()
+        except Exception as e:
+            log.debug("quit request failed: %s", e)
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        lock = InstanceLock()
+        if lock.acquire():
+            lock.close()
+            return True
+        time.sleep(0.25)
+    return False
+
+
+def _updated_line(restarted: bool) -> str:
+    return (
+        "Updated, and Murmur is running again."
+        if restarted
+        else "Updated. Start Murmur again to run the new version."
+    )
+
+
+def _launcher() -> str | None:
+    """The windowless launcher, for putting Murmur back after an update."""
+    import shutil
+
+    return shutil.which("murmurw") or shutil.which("murmur")
+
+
 def self_update(source: str = INSTALL_URL) -> int:
     """Reinstall Murmur over itself. Returns a process exit code.
 
@@ -190,16 +240,22 @@ def self_update(source: str = INSTALL_URL) -> int:
         return 1
 
     lock = InstanceLock()
-    if not lock.acquire():
-        print("Murmur is running, and it cannot replace its own files while it is.")
-        print("Quit it first (menu bar or tray icon > Quit Murmur), then run this again.")
-        return 1
+    was_running = not lock.acquire()
     lock.close()  # uv does the work; holding the port would only block the relaunch
+    if was_running:
+        # Windows cannot replace files the running copy holds open, so it has
+        # to go. Closing it here rather than making you do it by hand is the
+        # whole point; it comes back by itself once the swap is done.
+        print("Closing the running copy...")
+        if not stop_running_instance():
+            print("Murmur is running and did not close when asked.")
+            print("Quit it from the menu bar or tray icon, then run this again.")
+            return 1
 
     print(f"Updating Murmur from {__version__}...")
     if sys.platform == "win32":
-        return _reinstall_detached(uv, source)
-    return _reinstall_here(uv, source)
+        return _reinstall_detached(uv, source, restart=was_running)
+    return _reinstall_here(uv, source, restart=was_running)
 
 
 def _same_python() -> list[str]:
@@ -221,7 +277,7 @@ def _same_python() -> list[str]:
     return ["--python", f"{sys.version_info.major}.{sys.version_info.minor}"]
 
 
-def _reinstall_here(uv: str, source: str) -> int:
+def _reinstall_here(uv: str, source: str, restart: bool = False) -> int:
     """Run uv and wait for it. Correct everywhere except Windows."""
     import subprocess
 
@@ -239,12 +295,21 @@ def _reinstall_here(uv: str, source: str) -> int:
 
     CACHE_PATH.unlink(missing_ok=True)  # the banner is about a version we just left
     print()
-    print("Updated. Start Murmur again to run the new version.")
+    launcher = _launcher() if restart else None
+    if launcher:
+        try:
+            subprocess.Popen([launcher], start_new_session=True)
+            print(_updated_line(True))
+        except Exception as e:  # noqa: BLE001 - it updated; only the relaunch failed
+            log.debug("relaunch failed: %s", e)
+            print(_updated_line(False))
+    else:
+        print(_updated_line(False))
     print(f"What changed: {CHANGELOG_URL}")
     return 0
 
 
-def _reinstall_detached(uv: str, source: str) -> int:
+def _reinstall_detached(uv: str, source: str, restart: bool = False) -> int:
     r"""Hand the reinstall to a process that outlives this one. Windows only.
 
     `murmur` runs as Scripts\python.exe INSIDE the tool directory uv has to
@@ -265,6 +330,8 @@ def _reinstall_detached(uv: str, source: str) -> int:
     def q(value: str) -> str:  # a PowerShell single-quoted literal
         return "'" + value.replace("'", "''") + "'"
 
+    launcher = _launcher() if restart else None
+
     script = "; ".join(
         [
             f"Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue",
@@ -275,8 +342,15 @@ def _reinstall_detached(uv: str, source: str) -> int:
                 + [q(source)]
             ),
             "$code = $LASTEXITCODE",
+            # Put Murmur back only if it was up before, and only on a good
+            # swap: relaunching a half-replaced install helps nobody.
+            (
+                f"if ($code -eq 0) {{ Start-Process -FilePath {q(launcher)} }}"
+                if restart and launcher
+                else "$null = $code"
+            ),
             "if ($code -eq 0) {"
-            f" Write-Host ''; Write-Host 'Updated. Start Murmur again to run the new version.';"
+            f" Write-Host ''; Write-Host {q(_updated_line(restart and bool(launcher)))};"
             f" Write-Host {q('What changed: ' + CHANGELOG_URL)} "
             "} else {"
             f" Write-Host ''; Write-Host 'The update did not finish.';"
@@ -304,5 +378,7 @@ def _reinstall_detached(uv: str, source: str) -> int:
     print()
     print("Windows will not let Murmur replace its own files while this command")
     print("is running, so the update is finishing in a new window.")
+    if restart and launcher:
+        print("Murmur starts again by itself once it is done.")
     print("You can close this one.")
     return 0
