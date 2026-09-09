@@ -349,5 +349,5 @@ def test_the_windows_script_relaunches_only_on_a_clean_swap(monkeypatch, tmp_pat
 
 def test_stop_returns_true_when_nothing_is_running(monkeypatch):
     monkeypatch.setattr("murmur.server.find_running_instance", lambda *a, **k: None)
-    # The real lock is free in the test environment, so this returns at once.
+    _stub_lock(monkeypatch, acquired=True)  # not the real one: Murmur may be up
     assert updates.stop_running_instance(timeout=2.0) is True

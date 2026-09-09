@@ -56,3 +56,22 @@ def test_relaunch_reports_failure_rather_than_raising(monkeypatch):
 
     monkeypatch.setattr(subprocess, "Popen", boom)
     assert _relaunch_detached([]) is False
+
+
+def test_a_first_run_still_opens_settings_after_the_handoff(monkeypatch):
+    # load() has already written the default config by the time main() hands
+    # off, so the child cannot tell it is a first run; it has to be told.
+    import subprocess
+
+    seen = {}
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/murmurw")
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd) or object())
+
+    _relaunch_detached([], open_settings=True)
+    assert seen["cmd"][-1] == "--settings"
+    # Not doubled when the user asked for it themselves.
+    _relaunch_detached(["--settings"], open_settings=True)
+    assert seen["cmd"].count("--settings") == 1
+    # And not added on an ordinary run.
+    _relaunch_detached([], open_settings=False)
+    assert "--settings" not in seen["cmd"]

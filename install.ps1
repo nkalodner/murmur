@@ -52,8 +52,14 @@ Write-Host "Installing Murmur (this pulls a Python and builds it; give it a minu
 # stops resolving. `uv python install` can fail on the symlink it makes last
 # while still having installed a working interpreter, so the find comes after
 # and decides on its own.
-uv python install $PythonVersion 2>&1 | Out-Null
-$Python = (uv python find $PythonVersion 2>$null | Select-Object -First 1)
+# uv reports progress on stderr, and under $ErrorActionPreference = "Stop"
+# PowerShell 5.1 turns redirected native stderr into a terminating error.
+# Relax it for these two lines only; their exit status is decided below.
+$Prev = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+uv python install $PythonVersion *> $null
+$Python = (uv python find $PythonVersion 2> $null | Select-Object -First 1)
+$ErrorActionPreference = $Prev
 if ($Python) {
     uv tool install --force --reinstall --python $Python $Archive
 } else {
