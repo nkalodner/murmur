@@ -57,3 +57,57 @@ def test_prefers_the_installed_onnx_asr_alias_list(monkeypatch):
 def test_registry_entries_carry_the_ui_fields():
     for m in KNOWN_MODELS:
         assert m.label and m.languages and m.download and m.note
+
+
+def test_only_the_multilingual_models_offer_a_language_menu():
+    from murmur.models import languages_for
+
+    # Parakeet ignores the code, so the tray has nothing to show.
+    assert languages_for("nemo-parakeet-tdt-0.6b-v2") == []
+    assert languages_for("nemo-parakeet-tdt-0.6b-v3") == []
+    assert languages_for("whisper-base")
+    assert languages_for("nemo-canary-1b-v2")
+
+
+def test_canary_offers_no_chinese_but_whisper_does():
+    from murmur.models import languages_for
+
+    # The trap this menu exists to close: Canary's tokenizer carries every
+    # ISO code, so <|zh|> resolves and the model emits confident nonsense.
+    # It was trained on 25 European languages and must not offer Mandarin.
+    canary = dict(languages_for("nemo-canary-1b-v2"))
+    assert "zh" not in canary and "ja" not in canary
+    assert "en" in canary and "fr" in canary
+    assert "zh" in dict(languages_for("whisper-base"))
+
+
+def test_custom_repo_ids_get_the_full_list():
+    from murmur.models import COMMON_LANGUAGES, detects_language, languages_for
+
+    # A custom repo is nearly always a Whisper export, which detects.
+    assert languages_for("onnx-community/whisper-large-v3-turbo") == list(COMMON_LANGUAGES)
+    assert detects_language("onnx-community/whisper-large-v3-turbo") is True
+
+
+def test_blank_means_english_on_canary_and_detect_on_whisper():
+    from murmur.models import detects_language
+
+    assert detects_language("whisper-base") is True
+    assert detects_language("nemo-canary-1b-v2") is False
+
+
+def test_curated_language_codes_stay_inside_the_common_list():
+    from murmur.models import COMMON_LANGUAGES, languages_for
+
+    common = [c for c, _ in COMMON_LANGUAGES]
+    assert len(common) == len(set(common))
+    for m in KNOWN_MODELS:
+        if not m.uses_language:
+            continue
+        # None means "nothing we restrict", so the whole common list shows.
+        expected = (
+            common
+            if m.language_codes is None
+            else [c for c in common if c in m.language_codes]
+        )
+        assert [c for c, _ in languages_for(m.name)] == expected

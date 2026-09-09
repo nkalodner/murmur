@@ -1,6 +1,7 @@
 """System tray / menu bar: a microphone that wears the state color, and a
 menu that covers the day-to-day without opening the settings page — switch
-the mic, paste the last transcript, pause, toggle login, quit."""
+the mic, switch the spoken language, paste the last transcript, pause,
+toggle login, quit."""
 
 from __future__ import annotations
 
@@ -120,6 +121,7 @@ class Tray:
         on_quit: Callable[[], None],
         on_settings: Callable[[], None] | None = None,
         mic_choices: Callable[[], list[tuple[str, bool, Callable[[], None]]]] | None = None,
+        language_choices: Callable[[], list[tuple[str, bool, Callable[[], None]]]] | None = None,
         last_transcript: Callable[[], str | None] | None = None,
         on_paste_last: Callable[[], None] | None = None,
         is_paused: Callable[[], bool] | None = None,
@@ -170,6 +172,28 @@ class Tray:
                     )
 
             items.append(pystray.MenuItem("Microphone", pystray.Menu(mic_items)))
+        if language_choices is not None:
+            # Rebuilt on open like the mic list, so switching models in the
+            # settings page changes what this offers without a restart.
+            def language_items():
+                for label, selected, pick in language_choices():
+                    yield pystray.MenuItem(
+                        label,
+                        self._wrap(pick, "switch language"),
+                        checked=(lambda item, sel=selected: sel),
+                        radio=True,
+                    )
+
+            has_languages = self._fresh(lambda: bool(language_choices()))
+            items.append(
+                pystray.MenuItem(
+                    "Language",
+                    pystray.Menu(language_items),
+                    # Empty on a model that ignores the code (Parakeet), and
+                    # an empty submenu is worse than no submenu.
+                    visible=lambda item: bool(has_languages()),
+                )
+            )
         toggles = []
         if on_toggle_pause is not None and is_paused is not None:
             toggles.append(

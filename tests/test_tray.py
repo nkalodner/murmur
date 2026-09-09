@@ -1,7 +1,7 @@
 """The tray mark and the pure menu helpers (pystray itself needs a display)."""
 import numpy as np
 
-from murmur.app import last_transcript, mic_choices
+from murmur.app import language_choices, last_transcript, mic_choices
 from murmur.tray import _ICON_CACHE, COLORS, LABELS, Tray, icon_for, render_icon
 
 
@@ -86,6 +86,40 @@ def test_mic_choices_marks_the_selection():
 def test_mic_choices_keeps_a_missing_device_visible():
     rows = mic_choices([{"name": "Built-in", "default": True}], "Elgato Wave")
     assert rows[-1] == ("Elgato Wave (not found)", True, "Elgato Wave")
+
+
+ROWS = [("en", "English"), ("zh", "Chinese (Mandarin)"), ("es", "Spanish")]
+
+
+def test_language_choices_is_empty_when_the_model_ignores_the_code():
+    # Parakeet: no rows means the tray hides the whole submenu.
+    assert language_choices([], None, False) == []
+
+
+def test_language_choices_leads_with_auto_where_blank_detects():
+    rows = language_choices(ROWS, None, True)
+    assert rows[0] == ("Auto (detect)", True, None)
+    assert [r[1] for r in rows] == [True, False, False, False]
+
+
+def test_language_choices_marks_the_selection():
+    rows = language_choices(ROWS, "zh", True)
+    assert ("Chinese (Mandarin) (zh)", True, "zh") in rows
+    assert [r[1] for r in rows].count(True) == 1
+
+
+def test_language_choices_offers_no_auto_where_blank_means_english():
+    # Canary decodes a blank code as English rather than detecting, so the
+    # menu says so instead of dangling an Auto that does something else.
+    rows = language_choices(ROWS, None, False)
+    assert all(label != "Auto (detect)" for label, _, _ in rows)
+    assert rows[0] == ("English (en)", True, "en")
+
+
+def test_language_choices_keeps_a_hand_typed_code_visible():
+    rows = language_choices(ROWS, "cy", True)
+    assert rows[-1] == ("cy (not in this model's list)", True, "cy")
+    assert [r[1] for r in rows].count(True) == 1
 
 
 def test_last_transcript_reads_newest(tmp_path, monkeypatch):
@@ -176,6 +210,55 @@ def test_tray_menu_offers_the_daily_actions(monkeypatch):
     paste = next(i for i in menu.items if i != "---" and _label(i) == "Paste last transcript")
     assert paste.enabled(paste) is True
     tray._last = None  # enabled tracks the callable, not a snapshot
+
+
+def test_tray_language_submenu_switches_and_hides(monkeypatch):
+    _fake_pystray(monkeypatch)
+    from murmur.tray import Tray
+
+    picked = []
+    rows = [
+        ("Auto (detect)", True, lambda: picked.append(None)),
+        ("Chinese (Mandarin) (zh)", False, lambda: picked.append("zh")),
+    ]
+    tray = Tray(
+        "hint", on_quit=lambda: None, on_settings=lambda: None,
+        mic_choices=lambda: [], language_choices=lambda: rows,
+        last_transcript=lambda: None, on_paste_last=lambda: None,
+        is_paused=lambda: False, on_toggle_pause=lambda: None,
+        autostart_state=lambda: {"supported": False, "enabled": False},
+        on_toggle_autostart=lambda: None, update_available=lambda: False,
+    )
+    item = next(
+        i for i in tray._icon.menu.items if i != "---" and _label(i) == "Language"
+    )
+    assert item.visible(item) is True
+    sub = item.action.items
+    assert [_label(i) for i in sub] == ["Auto (detect)", "Chinese (Mandarin) (zh)"]
+    assert all(i.radio for i in sub)
+    assert [i.checked(i) for i in sub] == [True, False]
+
+    sub[1].action(tray._icon, sub[1])
+    assert picked == ["zh"] and tray._icon.updates == 1
+
+
+def test_tray_hides_the_language_menu_on_a_single_language_model(monkeypatch):
+    _fake_pystray(monkeypatch)
+    from murmur.tray import Tray
+
+    # Parakeet ignores the code, so there is nothing to choose between.
+    tray = Tray(
+        "hint", on_quit=lambda: None, on_settings=lambda: None,
+        mic_choices=lambda: [], language_choices=lambda: [],
+        last_transcript=lambda: None, on_paste_last=lambda: None,
+        is_paused=lambda: False, on_toggle_pause=lambda: None,
+        autostart_state=lambda: {"supported": False, "enabled": False},
+        on_toggle_autostart=lambda: None, update_available=lambda: False,
+    )
+    item = next(
+        i for i in tray._icon.menu.items if i != "---" and _label(i) == "Language"
+    )
+    assert item.visible(item) is False
 
 
 def test_tray_paste_disabled_without_history_and_update_row_hidden(monkeypatch):
