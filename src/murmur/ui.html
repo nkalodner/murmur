@@ -335,7 +335,7 @@
       </div>
       <p class="hint" id="modelHint"></p>
       <div class="setting" style="margin-top:6px">
-        <span>Language code<span class="sub" id="languageSub">Two letters, like en. Whisper and Canary only; blank detects</span></span>
+        <span>Language code<span class="sub" id="languageSub">Two letters, like en. Whisper and Canary only</span></span>
         <input type="text" id="language" placeholder="auto" style="width:90px">
       </div>
     </div>
@@ -679,6 +679,22 @@ function updateModelHint() {
   // Parakeet ignores the language code, so only light the field up where
   // it does something (custom models might, so leave it open there).
   $("language").disabled = !!known && !known.uses_language;
+  // What blank actually does differs by model, and getting this wrong is
+  // how spoken Mandarin came out as English words: Whisper detects, Canary
+  // quietly decodes as English.
+  const sub = "Two letters, like en.";
+  if (known && !known.uses_language) {
+    $("languageSub").textContent = `${sub} This model ignores it`;
+  } else if (!known || known.detects_language) {
+    $("languageSub").textContent = `${sub} Blank detects the language`;
+  } else {
+    $("languageSub").textContent = `${sub} Blank is treated as English, not detected`;
+  }
+  if (known && known.language_codes) {
+    $("language").title = `Trained on: ${known.language_codes.join(", ")}`;
+  } else {
+    $("language").title = "";
+  }
 }
 
 function renderAll(state) {

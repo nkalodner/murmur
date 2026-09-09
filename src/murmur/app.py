@@ -325,7 +325,17 @@ class App:
             # Cache only; the network check runs on its own thread at startup.
             "update": updates.status(),
             # The curated menu the settings page renders its picker from.
-            "models": [asdict(m) for m in KNOWN_MODELS],
+            # language_codes is a frozenset, which json refuses, so it goes
+            # over as a sorted list.
+            "models": [
+                {
+                    **asdict(m),
+                    "language_codes": sorted(m.language_codes)
+                    if m.language_codes is not None
+                    else None,
+                }
+                for m in KNOWN_MODELS
+            ],
             # Word packs, terms included, so the page can list what each one
             # captures without a second round trip.
             "packs": pack_catalog(),
@@ -392,17 +402,20 @@ class App:
                 self.recorder.set_device(device_index)
                 if self._state in (State.RECORDING, State.LOCKED):
                     warnings.append("the microphone change applies to the next recording")
-            if (new.model, new.quantization, new.language) != (
-                old.model,
-                old.quantization,
-                old.language,
-            ):
+            if (new.model, new.quantization) != (old.model, old.quantization):
                 from murmur.transcribe import Transcriber
 
                 self.transcriber = Transcriber(new.model, new.quantization, new.language)
                 warnings.append(
                     "the model loads on the next dictation, so that one will be slow"
                 )
+            elif new.language != old.language:
+                # The language is passed to recognize(), not to load(), so
+                # the model already in memory can just be retargeted.
+                # Rebuilding the Transcriber here would drop a multi-gigabyte
+                # Whisper and reload it on the next dictation, which is the
+                # difference between the tray switch being usable and not.
+                self.transcriber.language = new.language
             if (new.hotkey, new.hotkey2) != (old.hotkey, old.hotkey2) and self.listener is not None:
                 if self._state in (State.RECORDING, State.LOCKED):
                     self._finish_recording()
@@ -514,6 +527,21 @@ class App:
             for label, selected, value in mic_choices(devices, self.cfg.device)
         ]
 
+    def pick_language(self, code: str | None) -> None:
+        """Tray: switch the decoding language; persists like a settings save."""
+        self.apply_config({"language": code})
+
+    def tray_language_choices(self) -> list[tuple[str, bool, "object"]]:
+        from murmur.models import detects_language, languages_for
+
+        model = self.cfg.model
+        return [
+            (label, selected, (lambda v=value: self.pick_language(v)))
+            for label, selected, value in language_choices(
+                languages_for(model), self.cfg.language, detects_language(model)
+            )
+        ]
+
     def paste_last_transcript(self) -> None:
         """Tray: re-inject the newest saved dictation at the cursor."""
         text = last_transcript()
@@ -618,6 +646,7 @@ class App:
                     self.shutdown,
                     on_settings=self.open_settings if self.settings_url else None,
                     mic_choices=self.tray_mic_choices,
+                    language_choices=self.tray_language_choices,
                     last_transcript=last_transcript,
                     on_paste_last=self.paste_last_transcript,
                     is_paused=self.is_paused,
@@ -701,6 +730,34 @@ def mic_choices(devices: list[dict], current: str | None) -> list[tuple[str, boo
     if current and not seen:
         rows.append((f"{current} (not found)", True, current))
     return rows
+
+
+def language_choices(
+    rows: list[tuple[str, str]], current: str | None, detects: bool
+) -> list[tuple[str, bool, str | None]]:
+    """(label, selected, config value) rows for the tray's Language menu.
+
+    Pure so it is testable, and empty for a model that ignores the code so
+    the menu can hide itself. Auto leads only where blank really means
+    detect; where it does not, blank decodes as English, so English is
+    what gets the checkmark. A code typed into the settings page stays
+    listed even when it is outside the curated set.
+    """
+    if not rows:
+        return []
+    # Canary and friends read a blank code as English rather than detecting.
+    effective = current if (current or detects) else "en"
+    out: list[tuple[str, bool, str | None]] = []
+    if detects:
+        out.append(("Auto (detect)", not current, None))
+    seen = False
+    for code, label in rows:
+        selected = effective == code
+        seen = seen or selected
+        out.append((f"{label} ({code})", selected, code))
+    if current and not seen:
+        out.append((f"{current} (not in this model's list)", True, current))
+    return out
 
 
 def _n(count: int, noun: str) -> str:

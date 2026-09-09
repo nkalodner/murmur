@@ -121,6 +121,13 @@ The exception is a conferencing app configured for exclusive microphone access, 
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
+### 0.13.0
+
+- **Switch languages from the menu bar.** A **Language** submenu sits under Microphone, listing what the model you are on was actually trained for, with a checkmark on the live pick. Switching is instant: the language is decided when your speech is decoded, not when the model is loaded, so a multi-gigabyte Whisper stays in memory instead of reloading.
+- **Speak Mandarin, get Mandarin.** Leaving the language blank makes Whisper guess per take, and a short take guesses English often enough that spoken Mandarin came back as English words. Pinning the language stops the guessing. The menu only offers languages the model can really do, so Canary never offers Chinese it was never trained on.
+- **The language field stopped claiming a blank box detects.** It does on Whisper, which runs a real detection pass. Canary just decodes as English, and now the hint says so instead of the opposite.
+- **The menu hides itself on Parakeet**, which reads no language code at all.
+
 ### 0.12.0
 
 - **Auto-format stopped turning quantities into clock times.** "two thirty minute demos" was typing as `2:30 minute demos`, and "version three twenty" as `3:20`. A unit noun after the pair now means an amount was said, and a label word before it means the number names something. Real times are untouched: "meet at four thirty" is still `4:30`.
@@ -220,7 +227,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 | Quick-tap Right Ctrl | Starts hands-free recording; tap again to finish |
 | Esc while recording | Cancels, nothing is pasted |
 
-The menu bar icon is a small retro microphone that wears the state: white when idle on a dark bar (dark ink on a light one, following your system appearance), red recording, amber transcribing, dimmed while loading or paused. Its menu covers the day-to-day without opening the settings page: switch the microphone, paste the last transcript, pause dictation, toggle Start at login, and quit. Short chimes confirm ready, start, stop, and cancel.
+The menu bar icon is a small retro microphone that wears the state: white when idle on a dark bar (dark ink on a light one, following your system appearance), red recording, amber transcribing, dimmed while loading or paused. Its menu covers the day-to-day without opening the settings page: switch the microphone, switch the spoken language on a multilingual model, paste the last transcript, pause dictation, toggle Start at login, and quit. Short chimes confirm ready, start, stop, and cancel.
 
 Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches of audio are split at pauses and transcribed piece by piece. Every transcript is also appended to `~/.murmur/history.jsonl`, so pasting into the wrong window never loses your words.
 
@@ -235,7 +242,7 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 - **Typing**: everything about what lands at your cursor. **Auto-format speech**: spoken times, dates, and numbers come out written, so "one pm" types as `1:00 PM`, "july third" as `July 3rd`, "twenty twenty six" as `2026`, "fifty percent" as `50%`; grammar the model itself writes is trusted, so "which one am I" is never mangled and "A, B, or C" keeps its commas, and a number that is a quantity or a label stays spoken ("two thirty minute demos", "version three twenty"). Two rules that interpret rather than transcribe nest under it with their own switches, both on by default: **Times without am or pm** ("four thirty" as `4:30`) and **Spelled-out letters** ("W S A" as `WSA`). **Drop filler words**: "um" and "uh" never get typed, and only sounds that are never real words are on the list (`filler_words` in the config takes additions). Plus trailing space, paste versus type-it-out, and the clipboard restore delay.
 - **Sounds**: chimes on or off, with **Chime volume** and its Play preview on the same row (at 0% nothing sounds and nothing is muted). **Keep the chime out of the take** sits under the slider: the start cue plays while the mic is already open, so without it the model hears the cue and types "mm". It costs the first 0.26s of every take, which buys nothing on headphones where the cue never reaches the mic, so turn it off there. **Quiet other audio** turns the system volume down while you talk and puts it back at the exact level afterward (off by default; macOS and Windows; the slider sets how far down).
 - **Dictionary**: **Word packs** first (see below), then your own vocabulary and replacements. Recent transcripts sit on the same tab, newest first, so testing an entry is dictate, refresh, check, and the keep-history toggle is right beside the list it feeds.
-- **Model**: pick from the menu (Parakeet v2/v3, Whisper base, Canary 1B v2) or enter any onnx-asr name / Hugging Face repo id via Custom, plus precision and a language code for the models that read one. A new model downloads on first use and loads on the next dictation. See [Choosing a model](#choosing-a-model).
+- **Model**: pick from the menu (Parakeet v2/v3, Whisper base, Canary 1B v2) or enter any onnx-asr name / Hugging Face repo id via Custom, plus precision and a language code for the models that read one. The language is also in the tray menu, which is the quicker way to move between two languages. A new model downloads on first use and loads on the next dictation. See [Choosing a model](#choosing-a-model).
 - **App**: Open Murmur at login (Windows and macOS; see [below](#do-i-need-to-keep-the-terminal-open-start-at-login)), the daily update check, which is the only network request Murmur makes and sends nothing about you, and a Help panel with the version and a Report an issue link.
 
 ### The dictionary
@@ -331,7 +338,13 @@ The settings page offers four directly; all run fully local through [onnx-asr](h
 | `whisper-base` | 99 languages | ~80 MB | Lightest and quickest to try, widest language list, noticeably softer accuracy. Set a language code if it guesses wrong. |
 | `nemo-canary-1b-v2` | 25 European languages | ~1 GB | The most accurate multilingual option, with a longer pause after speaking on CPU. |
 
-The Custom field takes anything else onnx-asr can load: its other aliases (the GigaAM and FastConformer families for Russian, `nemo-parakeet-ctc-0.6b`, and so on) or any Hugging Face repo id with a slash, like `onnx-community/whisper-large-v3-turbo` for Whisper's strongest open model. Two notes on custom repos: not all of them ship int8 files, so switch quantization to full precision if the load fails, and bigger Whisper models get slow on a CPU. The `language` setting (two letters, like `en`) is read by Whisper and Canary; Parakeet ignores it.
+The Custom field takes anything else onnx-asr can load: its other aliases (the GigaAM and FastConformer families for Russian, `nemo-parakeet-ctc-0.6b`, and so on) or any Hugging Face repo id with a slash, like `onnx-community/whisper-large-v3-turbo` for Whisper's strongest open model. Two notes on custom repos: not all of them ship int8 files, so switch quantization to full precision if the load fails, and bigger Whisper models get slow on a CPU. The `language` setting (two letters, like `en`) is read by Whisper and Canary; Parakeet ignores it. It is also in the tray menu, under **Language**.
+
+**For anything outside the 25 European languages, Whisper is the only option here.** Parakeet and Canary cover Europe, so Mandarin, Japanese, Korean, Arabic, and Hindi all need a Whisper model. Canary will not refuse a language it was never trained on, because its tokenizer carries every ISO code; it just returns confident nonsense, which is why the tray menu offers it only what it can really do.
+
+**Set the language rather than leaving it blank when you are not speaking English.** Blank makes Whisper guess once per take, and a few seconds of speech is thin evidence: a Mandarin sentence guessed as English comes back as English words rather than characters. Pinning it is one click in the tray menu.
+
+For strong Mandarin, `onnx-community/whisper-large-v3-turbo` at **full precision** is the pick. Its int8 build fails to load on most CPUs (`NOT_IMPLEMENTED ... ConvInteger`), which is not a broken download; switch precision to full and it loads.
 
 ## Do I need to keep the terminal open? Start at login
 
