@@ -335,8 +335,11 @@
       </div>
       <p class="hint" id="modelHint"></p>
       <div class="setting" style="margin-top:6px">
-        <span>Language code<span class="sub" id="languageSub">Two letters, like en. Whisper and Canary only</span></span>
-        <input type="text" id="language" placeholder="auto" style="width:90px">
+        <span>Language<span class="sub" id="languageSub">Whisper and Canary only</span></span>
+        <select id="languageSelect" style="width:210px"></select>
+      </div>
+      <div class="row" id="languageCustomRow" style="display:none;margin-top:8px">
+        <input type="text" id="language" placeholder="two-letter code, like en" style="flex:1">
       </div>
     </div>
   </section>
@@ -643,6 +646,7 @@ function renderPairs() {
 
 // The curated model menu arrives with /api/state; anything else is Custom.
 let models = [];
+let languages = [];
 let packs = [];
 
 function renderModelPicker() {
@@ -666,6 +670,58 @@ function renderModelPicker() {
   updateModelHint();
 }
 
+function languageRowsFor(model) {
+  // Mirrors models.languages_for: a model only gets offered what it was
+  // trained on, because Canary accepts any ISO code and returns nonsense
+  // for the ones it never learned. A custom repo is unknown to us and
+  // nearly always a Whisper export, so it gets the whole list.
+  const known = models.find((m) => m.name === model);
+  if (!known) return languages;
+  if (!known.uses_language) return [];
+  if (!known.language_codes) return languages;
+  return languages.filter(([code]) => known.language_codes.includes(code));
+}
+
+function renderLanguagePicker() {
+  const known = models.find((m) => m.name === cfg.model);
+  const rows = languageRowsFor(cfg.model);
+  const detects = known ? known.detects_language : true;
+  const sel = $("languageSelect");
+  sel.innerHTML = "";
+
+  const add = (value, text) => {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = text;
+    sel.appendChild(opt);
+  };
+  if (rows.length === 0) {
+    add("", "Not used by this model");
+    sel.value = "";
+    sel.disabled = true;
+    $("languageCustomRow").style.display = "none";
+    return;
+  }
+  sel.disabled = false;
+  // Blank means detect on Whisper and English on Canary, so only Whisper
+  // gets an Auto row; Canary's blank is shown as the English it really is.
+  if (detects) add("", "Auto (detect)");
+  for (const [code, name] of rows) add(code, `${name} (${code})`);
+  add("__custom__", "Other (type a code)…");
+
+  const listed = rows.some(([code]) => code === cfg.language);
+  const custom = !!cfg.language && !listed;
+  if (custom) {
+    sel.value = "__custom__";
+    $("language").value = cfg.language;
+  } else if (cfg.language) {
+    sel.value = cfg.language;
+  } else {
+    sel.value = detects ? "" : "en";
+  }
+  $("languageCustomRow").style.display = custom ? "flex" : "none";
+}
+
 function updateModelHint() {
   const known = models.find((m) => m.name === cfg.model);
   if (known) {
@@ -676,25 +732,17 @@ function updateModelHint() {
       "Any onnx-asr name or Hugging Face repo id. If a repo has no int8 files, " +
       "switch to full precision.";
   }
-  // Parakeet ignores the language code, so only light the field up where
-  // it does something (custom models might, so leave it open there).
-  $("language").disabled = !!known && !known.uses_language;
-  // What blank actually does differs by model, and getting this wrong is
-  // how spoken Mandarin came out as English words: Whisper detects, Canary
+  // What the picker means differs by model, and getting this wrong is how
+  // spoken Mandarin came out as English words: Whisper detects, Canary
   // quietly decodes as English.
-  const sub = "Two letters, like en.";
   if (known && !known.uses_language) {
-    $("languageSub").textContent = `${sub} This model ignores it`;
+    $("languageSub").textContent = "This model works it out on its own";
   } else if (!known || known.detects_language) {
-    $("languageSub").textContent = `${sub} Blank detects the language`;
+    $("languageSub").textContent = "Also in the tray menu. Set it rather than leaving it on Auto if you are not speaking English";
   } else {
-    $("languageSub").textContent = `${sub} Blank is treated as English, not detected`;
+    $("languageSub").textContent = "Also in the tray menu. This model has no detect, so it decodes as whatever is picked here";
   }
-  if (known && known.language_codes) {
-    $("language").title = `Trained on: ${known.language_codes.join(", ")}`;
-  } else {
-    $("language").title = "";
-  }
+  renderLanguagePicker();
 }
 
 function renderAll(state) {
@@ -704,6 +752,7 @@ function renderAll(state) {
   cfg.replacements = (cfg.replacements || []).map((p) => ({ from: p.from || "", to: p.to || "" }));
   devices = state.devices || [];
   models = state.models || [];
+  languages = state.languages || [];
   packs = state.packs || [];
   cfg.dictionary_packs = (cfg.dictionary_packs || []).filter((id) => typeof id === "string");
   renderHotkeys();
@@ -908,6 +957,18 @@ $("modelCustom").addEventListener("input", () => {
   cfg.model = $("modelCustom").value.trim();
   setDirty(true);
   updateModelHint();
+});
+$("languageSelect").addEventListener("change", () => {
+  const v = $("languageSelect").value;
+  if (v === "__custom__") {
+    $("languageCustomRow").style.display = "flex";
+    $("language").value = cfg.language || "";
+    $("language").focus();
+    return;
+  }
+  $("languageCustomRow").style.display = "none";
+  cfg.language = v || null;
+  setDirty(true);
 });
 $("language").addEventListener("input", () => { cfg.language = $("language").value.trim() || null; setDirty(true); });
 $("quantization").addEventListener("change", () => { cfg.quantization = $("quantization").value || null; setDirty(true); });
