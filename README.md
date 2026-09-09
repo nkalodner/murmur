@@ -128,6 +128,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 - **The language field stopped claiming a blank box detects.** It does on Whisper, which runs a real detection pass. Canary just decodes as English, and now the hint says so instead of the opposite.
 - **The settings page picks a language from a list too**, instead of a free-text box that would take a code the model was never trained on. It carries the same "Other" escape for anything outside the list, and `murmur --doctor` now prints the language it will actually decode with.
 - **The menu hides itself on Parakeet**, which reads no language code at all.
+- **`murmur` stays running when you close the terminal.** It used to be tied to the window that started it, so leaving it running meant knowing about `murmurw`, the separate windowless launcher. Now `murmur` hands off to that copy itself and hands your prompt back; there is one command to remember. The one-shot commands (`--doctor`, `--update`, `--list-devices` and the rest) still print here as they always did, and `--foreground` keeps it attached when you want to watch it work.
 - **Murmur installs onto its own Python now.** Both installers place a uv-managed Python and pin Murmur to it. Before, uv was free to reuse whatever was already on the machine, and on Windows that is often the Microsoft Store Python, whose folders contain reparse points uv cannot delete. That is the real cause behind a cluster of Windows reports: `uv tool list` failing to find Murmur at all, updates dying with "the object manager encountered a reparse point" (os error 4395), and `uv trampoline failed to canonicalize script path`. Updating keeps you on the interpreter you are already running, so nobody drifts back onto it. Existing installs are only fixed by reinstalling: see [Troubleshooting](#troubleshooting).
 - **`murmur --update` closes Murmur and starts it again for you.** It used to refuse while Murmur was running and tell you to quit it by hand, which was the one manual step left in a one-command update. It now asks the running copy to quit, waits for it to actually let go, updates, and puts it back. Nothing running to begin with means nothing gets started.
 - **`murmur --update` no longer breaks itself on Windows.** It ran uv from inside the folder uv had to replace, and Windows will not delete a running program, so the update removed half the install and stopped with "Access is denied", leaving no working `murmur` at all. Quitting first did not help, because the thing holding the files was the update command. It now hands the work to a second window that waits for Murmur to exit before starting, which closes itself when the update lands and stays open if it does not, so the reason is still on screen. If a past attempt left you stranded, the recovery is in [Troubleshooting](#troubleshooting).
@@ -215,7 +216,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 
 ### 0.3.0
 
-- **Start at login**, with a windowless launcher (`murmurw`) so Murmur runs from the tray with no terminal open.
+- **Start at login**, so Murmur runs from the tray with no terminal open.
 - **Test mic** in the settings page, and a softer start chime.
 
 ### 0.2.0
@@ -359,10 +360,10 @@ murmur --enable-autostart     # start at login from now on
 murmur --disable-autostart    # stop
 ```
 
-A `murmur` you start in a terminal is tied to that window, so closing it quits. The startup toggle avoids that by launching Murmur from the system, with no terminal involved.
+Since 0.13.0 `murmur` hands off to a windowless copy and gives your prompt straight back, so closing the terminal leaves it running in the tray. The startup toggle is still the way to have it there without typing anything at all.
 
-- **Windows**: the install also created `murmurw`, a windowless launcher. Run `murmurw` yourself any time to start Murmur with no console window, then close the terminal and it stays in the tray.
-- **macOS**: `murmurw` and `murmur` are the same command, so use the login toggle to run without a terminal. To start the background copy right now without logging out, run `launchctl kickstart -k gui/$(id -u)/com.murmur.dictation`. Open the settings from the menu bar or with `murmur --settings` (it attaches to the running copy) rather than launching `murmur` again, which would start a second instance.
+- **Any platform**: run `murmur`, close the terminal, carry on. It keeps running until you quit it from the tray. `murmur --foreground` keeps it attached to the terminal instead, which is what you want with `-v` while working out why something misbehaves (both `-v` and `--no-tray` stay attached on their own).
+- **macOS**: to start the login copy right now without logging out, run `launchctl kickstart -k gui/$(id -u)/com.murmur.dictation`. Open the settings from the menu bar or with `murmur --settings` (it attaches to the running copy) rather than launching `murmur` again.
 
 - **Windows**: the toggle places a shortcut to `murmurw.exe` in your Startup folder (falling back to a registry Run entry if the folder is blocked). Nothing shows on screen but the tray icon.
 - **macOS**: the toggle installs a LaunchAgent and loads it. One caveat: launched this way, macOS sees a new launcher, so it asks once more for Microphone, Input Monitoring, and Accessibility. Grant them and you are set.
