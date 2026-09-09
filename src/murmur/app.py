@@ -47,6 +47,13 @@ class App:
         self._device = find_input_device(cfg.device)
         self.recorder = Recorder(self._device)
         self.transcriber = Transcriber(cfg.model, cfg.quantization, cfg.language)
+        # A model swap loads in the background while the current one keeps
+        # serving. _pending is what is loading (for the tray and the page),
+        # _load_gen lets a newer swap outrank an older one still in flight.
+        self._pending: Transcriber | None = None
+        self._load_gen = 0
+        self._model_error: str | None = None
+        self._model_notice: str | None = None
         self.sounds = Sounds(cfg.sounds, cfg.sound_volume / 100, cfg.mute_start_cue)
         self.injector = Injector(cfg.paste, cfg.restore_clipboard_ms, self._hotkey_down)
         self.listener = None  # created in run()
@@ -87,7 +94,7 @@ class App:
         self._state = state
         if self.tray:
             name = TRAY_STATE[state]
-            if state == State.IDLE and not self.transcriber.ready:
+            if state == State.IDLE and (not self.transcriber.ready or self._pending is not None):
                 name = "loading"
             if state == State.IDLE and self._paused:
                 name = "paused"
@@ -229,16 +236,9 @@ class App:
     # -- worker thread -----------------------------------------------------
 
     def _worker_loop(self) -> None:
-        try:
-            self.transcriber.load()
-            with self._lock:
-                self._set_state(self._state)  # refresh the tray away from "loading"
-            self.sounds.play("ready")
-            log.info("Ready. Hold %s and talk.", self._hotkey_label())
-        except Exception as e:
-            log.error("Model failed to load: %s", e)
-            log.error("If the download failed, check your connection and run: murmur --download")
-            self.sounds.play("error")
+        # Startup is a swap from nothing: same loader, same fallbacks, run
+        # here on the worker thread rather than on one of its own.
+        self._load_model(gen=0, new=self.cfg, old=None, previous=None, startup=True)
         while True:
             job = self._jobs.get()
             if job is None or self._stopping.is_set():
@@ -300,6 +300,9 @@ class App:
         with self._lock:
             state = self._state.value
             model_ready = self.transcriber.ready
+            model_loading = self._pending.model_name if self._pending is not None else None
+            model_error = self._model_error
+            model_notice = self._model_notice
             cfg = asdict(self.cfg)
         devices = []
         try:
@@ -318,6 +321,11 @@ class App:
         return {
             "state": state,
             "model_ready": model_ready,
+            # The model being loaded in the background, if any, and what the
+            # last swap had to say for itself.
+            "model_loading": model_loading,
+            "model_error": model_error,
+            "model_notice": model_notice,
             "platform": sys.platform,
             "config": cfg,
             "devices": devices,
@@ -406,11 +414,14 @@ class App:
                 if self._state in (State.RECORDING, State.LOCKED):
                     warnings.append("the microphone change applies to the next recording")
             if (new.model, new.quantization) != (old.model, old.quantization):
-                from murmur.transcribe import Transcriber
-
-                self.transcriber = Transcriber(new.model, new.quantization, new.language)
+                # The old model keeps serving until the new one is ready. A
+                # swap that fails leaves you exactly where you were, with the
+                # reason on the settings page, instead of with a Murmur that
+                # errors on every dictation and nothing to say why.
+                self._begin_model_swap(new, old)
                 warnings.append(
-                    "the model loads on the next dictation, so that one will be slow"
+                    "the new model is loading in the background; dictation keeps "
+                    "using the current one until it is ready"
                 )
             elif new.language != old.language:
                 # The language is passed to recognize(), not to load(), so
@@ -529,6 +540,86 @@ class App:
             (label, selected, (lambda v=value: self.pick_microphone(v)))
             for label, selected, value in mic_choices(devices, self.cfg.device)
         ]
+
+    def _begin_model_swap(self, new, old) -> None:
+        """Start loading `new`'s model on its own thread. Called under _lock."""
+        import threading
+
+        from murmur.transcribe import Transcriber
+
+        self._load_gen += 1
+        gen = self._load_gen
+        self._pending = Transcriber(new.model, new.quantization, new.language)
+        self._model_error = None
+        self._model_notice = None
+        previous = self.transcriber
+        threading.Thread(
+            target=self._load_model,
+            kwargs=dict(gen=gen, new=new, old=old, previous=previous, startup=False),
+            name="murmur-model-load",
+            daemon=True,
+        ).start()
+
+    def _load_model(self, *, gen: int, new, old, previous, startup: bool) -> None:
+        """Load new's model; on success swap it in, on failure put things back.
+
+        `previous` is the transcriber serving right now (None at startup).
+        A failed swap reverts model and precision to `old` when `previous`
+        was actually working, so a bad pick never costs a good one.
+        """
+        from dataclasses import replace
+
+        from murmur.config import save
+        from murmur.transcribe import load_with_fallback
+
+        try:
+            loaded, notice = load_with_fallback(new.model, new.quantization, new.language)
+        except Exception as e:  # noqa: BLE001 - every failure is reported the same way
+            precision = new.quantization or "full precision"
+            reason = _tidy_error(e)
+            with self._lock:
+                if gen != self._load_gen:
+                    return  # a newer swap has already taken over
+                self._pending = None
+                if previous is not None and previous.ready and old is not None:
+                    self.cfg = replace(self.cfg, model=old.model, quantization=old.quantization)
+                    reverted = self.cfg
+                    self._model_error = (
+                        f"Could not load {new.model} ({precision}): {reason}. "
+                        f"Still using {old.model}."
+                    )
+                else:
+                    reverted = None
+                    self._model_error = f"Could not load {new.model} ({precision}): {reason}"
+                self._set_state(self._state)
+            if reverted is not None:
+                save(reverted)
+            log.error("Model failed to load: %s", e)
+            if startup:
+                log.error("If the download failed, check your connection and run: murmur --download")
+            self.sounds.play("error")
+            return
+
+        persist = None
+        with self._lock:
+            if gen != self._load_gen:
+                return
+            loaded.language = self.cfg.language  # may have changed during the load
+            self.transcriber = loaded
+            self._pending = None
+            self._model_error = None
+            if notice:
+                self.cfg = replace(self.cfg, quantization=None)
+                persist = self.cfg
+                self._model_notice = notice
+            self._set_state(self._state)  # tray leaves "loading"
+        if persist is not None:
+            save(persist)
+        self.sounds.play("ready")
+        if startup:
+            log.info("Ready. Hold %s and talk.", self._hotkey_label())
+        else:
+            log.info("Switched to %s", new.model)
 
     def pick_language(self, code: str | None) -> None:
         """Tray: switch the decoding language; persists like a settings save."""
@@ -761,6 +852,17 @@ def language_choices(
     if current and not seen:
         out.append((f"{current} (not in this model's list)", True, current))
     return out
+
+
+def _tidy_error(e: BaseException, limit: int = 220) -> str:
+    """One readable line for the settings page: request ids and runs of
+    whitespace go, and it is capped so a stack of detail cannot swallow the
+    part that says what to do."""
+    import re
+
+    text = re.sub(r"\s*\(Request ID:[^)]*\)", "", str(e))
+    text = re.sub(r"\s+", " ", text).strip() or e.__class__.__name__
+    return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
 
 
 def _should_detach(args) -> bool:
