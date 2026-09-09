@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import sys
 import threading
 import time
 
@@ -31,6 +32,7 @@ log = logging.getLogger("murmur")
 
 VERSION_URL = "https://raw.githubusercontent.com/nkalodner/murmur/main/src/murmur/__init__.py"
 CHANGELOG_URL = "https://github.com/nkalodner/murmur#whats-new"
+TROUBLESHOOTING_URL = "https://github.com/nkalodner/murmur"
 CACHE_PATH = CONFIG_DIR / "update.json"
 # What `murmur --update` reinstalls from. The archive rather than the git URL,
 # so updating needs no git and no clone to find: the tarball is the same
@@ -169,13 +171,15 @@ def self_update(source: str = INSTALL_URL) -> int:
     keeps that to one command: there is no checkout to locate and no path to
     remember, and uv fetches, builds, and swaps the tool in place.
 
-    The one step that cannot be automated is the quit: on Windows the running
-    copy holds its own files open, so the reinstall would fail halfway. The
+    The one step that cannot be automated is the quit: a running copy holds
+    its own files open on Windows, so the reinstall would fail halfway. The
     instance lock already knows whether a copy is up, so this asks rather
     than letting uv fail with a file-permission error nobody can read.
+
+    Windows needs one more dodge even with nothing else running: see
+    _reinstall_detached.
     """
     import shutil
-    import subprocess
 
     from murmur.singleton import InstanceLock
 
@@ -193,6 +197,15 @@ def self_update(source: str = INSTALL_URL) -> int:
     lock.close()  # uv does the work; holding the port would only block the relaunch
 
     print(f"Updating Murmur from {__version__}...")
+    if sys.platform == "win32":
+        return _reinstall_detached(uv, source)
+    return _reinstall_here(uv, source)
+
+
+def _reinstall_here(uv: str, source: str) -> int:
+    """Run uv and wait for it. Correct everywhere except Windows."""
+    import subprocess
+
     try:
         done = subprocess.run([uv, "tool", "install", "--force", "--reinstall", source])
     except Exception as e:  # noqa: BLE001 - any failure here is the same message
@@ -200,11 +213,67 @@ def self_update(source: str = INSTALL_URL) -> int:
         return 1
     if done.returncode != 0:
         print()
-        print("The update did not finish. Troubleshooting: " + CHANGELOG_URL.split("#")[0])
+        print("The update did not finish. Troubleshooting: " + TROUBLESHOOTING_URL)
         return done.returncode
 
     CACHE_PATH.unlink(missing_ok=True)  # the banner is about a version we just left
     print()
     print("Updated. Start Murmur again to run the new version.")
     print(f"What changed: {CHANGELOG_URL}")
+    return 0
+
+
+def _reinstall_detached(uv: str, source: str) -> int:
+    """Hand the reinstall to a process that outlives this one. Windows only.
+
+    `murmur` runs as Scripts\python.exe INSIDE the tool directory uv has to
+    replace, and Windows will not delete a running executable. Waiting on uv
+    from here therefore destroys the install every time: uv removes Lib and
+    both launchers, reaches its own python.exe, stops with "Access is
+    denied", and leaves no working murmur at all. Quitting the tray app
+    first does not help, because what holds the files is this command.
+
+    So spawn a PowerShell that waits for this PID to exit and only then runs
+    uv, in its own window so the output survives this one closing. POSIX
+    keeps a deleted file alive for the process still running it, so only
+    Windows needs any of this.
+    """
+    import os
+    import subprocess
+
+    def q(value: str) -> str:  # a PowerShell single-quoted literal
+        return "'" + value.replace("'", "''") + "'"
+
+    script = "; ".join(
+        [
+            f"Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue",
+            f"& {q(uv)} tool install --force --reinstall {q(source)}",
+            "if ($LASTEXITCODE -eq 0) {"
+            f" Write-Host ''; Write-Host 'Updated. Start Murmur again to run the new version.';"
+            f" Write-Host {q('What changed: ' + CHANGELOG_URL)} "
+            "} else {"
+            f" Write-Host ''; Write-Host 'The update did not finish.';"
+            f" Write-Host {q('Troubleshooting: ' + TROUBLESHOOTING_URL)} "
+            "}",
+            "Write-Host ''",
+            "Write-Host 'Press Enter to close.'",
+            "Read-Host | Out-Null",
+        ]
+    )
+    try:
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+            close_fds=True,
+        )
+    except Exception as e:  # noqa: BLE001 - the advice is the same whatever failed
+        print(f"Could not start the updater: {e}")
+        print(f"Run this yourself instead:  uv tool install --force --reinstall {source}")
+        return 1
+
+    CACHE_PATH.unlink(missing_ok=True)  # the banner is about a version we are leaving
+    print()
+    print("Windows will not let Murmur replace its own files while this command")
+    print("is running, so the update is finishing in a new window.")
+    print("You can close this one.")
     return 0
