@@ -763,6 +763,50 @@ def language_choices(
     return out
 
 
+def _should_detach(args) -> bool:
+    """Whether this run should hand off to the windowless copy.
+
+    stderr is None under pythonw, which is how the handed-off copy knows not
+    to hand off again; --foreground is passed to it as well, so the guard
+    holds on platforms where the launcher is an ordinary console script.
+    """
+    if args.foreground or args.no_tray or args.verbose:
+        return False
+    return sys.stderr is not None
+
+
+def _relaunch_detached(argv: list[str] | None) -> bool:
+    """Start Murmur windowless with these same arguments. True if it started."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    passthrough = list(argv if argv is not None else sys.argv[1:])
+    launcher = shutil.which("murmurw") or shutil.which("murmur")
+    if launcher:
+        cmd = [launcher, "--foreground", *passthrough]
+    else:
+        # Running from a checkout rather than an install: prefer the
+        # windowless interpreter sitting next to this one.
+        exe = Path(sys.executable)
+        gui = exe.with_name("pythonw.exe")
+        cmd = [str(gui if gui.exists() else exe), "-m", "murmur", "--foreground", *passthrough]
+
+    extra: dict = {}
+    if sys.platform == "win32":
+        extra["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+        )
+    else:
+        extra["start_new_session"] = True
+    try:
+        subprocess.Popen(cmd, close_fds=True, **extra)
+        return True
+    except Exception as e:  # noqa: BLE001 - fall back to running here
+        log.debug("could not detach (%s); staying in the foreground", e)
+        return False
+
+
 def _n(count: int, noun: str) -> str:
     return f"{count} {noun}{'' if count == 1 else 's'}"
 
@@ -830,6 +874,11 @@ def main(argv: list[str] | None = None) -> int:
         "--update",
         action="store_true",
         help="install the newest Murmur over this one, then exit (quit Murmur first)",
+    )
+    parser.add_argument(
+        "--foreground",
+        action="store_true",
+        help="stay attached to this terminal instead of running in the background",
     )
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--version", action="version", version=f"murmur {__version__}")
@@ -1018,6 +1067,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Settings: {url}")
             return 0
         log.info("Murmur is not running yet; starting it now.")
+
+    # Running Murmur means leaving it running, and a console process does the
+    # opposite: close the terminal and it dies with it. So `murmur` hands off
+    # to the windowless copy and gives the prompt straight back. --foreground
+    # opts out, and -v / --no-tray imply it, since both exist to watch what it
+    # is doing.
+    if _should_detach(args) and _relaunch_detached(argv):
+        print("Murmur is running in the background.")
+        print("Close this terminal whenever you like; quit it from the tray icon.")
+        return 0
 
     # One copy at a time. Two running instances type every dictation twice,
     # which is the classic "I ran murmur in another terminal" mixup.
