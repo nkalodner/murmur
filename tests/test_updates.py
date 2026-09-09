@@ -257,3 +257,37 @@ def test_the_two_version_strings_agree():
     text = (root / "pyproject.toml").read_text(encoding="utf-8")
     declared = re.search(r'(?m)^version\s*=\s*"([^"]+)"', text).group(1)
     assert declared == updates.__version__
+
+
+def test_the_update_stays_on_the_interpreter_already_in_use():
+    # Left to itself uv re-picks a default, and on Windows that can be the
+    # Microsoft Store python, whose environments carry reparse points uv
+    # cannot delete: the next update then dies with os error 4395.
+    import sys
+
+    args = updates._same_python()
+    assert args[0] == "--python"
+    assert args[1] == sys.base_prefix or args[1].startswith(sys.base_prefix)
+
+
+def test_both_reinstall_paths_pass_the_interpreter(monkeypatch, tmp_path):
+    import subprocess
+
+    monkeypatch.setattr(updates, "CACHE_PATH", tmp_path / "update.json")
+
+    seen = {}
+
+    class Done:
+        returncode = 0
+
+    monkeypatch.setattr("subprocess.run", lambda cmd, *a, **k: (seen.update(cmd=cmd), Done())[1])
+    updates._reinstall_here("uv", updates.INSTALL_URL)
+    assert "--python" in seen["cmd"]
+    assert seen["cmd"][-1] == updates.INSTALL_URL
+
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(ps=cmd) or object())
+    updates._reinstall_detached("uv", updates.INSTALL_URL)
+    script = seen["ps"][-1]
+    # The flag itself must not be quoted as though it were a path.
+    assert " --python '" in script or " --python " in script
+    assert "'--python'" not in script
