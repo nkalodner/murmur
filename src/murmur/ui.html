@@ -26,6 +26,8 @@
   .dot{width:9px;height:9px;border-radius:50%;background:var(--faint)}
   .dot.idle{background:hsl(38 12% 59%)} .dot.recording{background:var(--rec)}
   .dot.busy{background:var(--busy)} .dot.loading{background:transparent;border:2px solid var(--faint);width:7px;height:7px}
+  .dot.error{background:var(--danger)}
+  .hint.bad{color:var(--danger)}
   .dot.off{background:transparent;border:2px solid var(--danger);width:7px;height:7px}
   section{margin-top:22px}
   section>.kicker{display:block;margin-bottom:8px}
@@ -144,9 +146,9 @@
   <div id="updateBanner" class="update">
     <b>Murmur <span id="updateVersion"></span> is available.</b> You have <span id="updateCurrent"></span>.
     <a id="updateChangelog" href="#" target="_blank" rel="noreferrer">See what changed</a>.
-    Quit Murmur, then run:
-    <code>murmur --update</code>
+    <button class="primary" id="updateNowBanner" style="margin-left:10px">Update now</button>
   </div>
+  <div id="updatingBanner" class="update"><b>Updating.</b> Murmur is closing, installing the newest version, and starting again. This page reconnects by itself; give it a minute. <span id="updatingNote"></span></div>
   <div id="permBanner" class="perm"><b id="permTitle"></b> <span id="permBody"></span></div>
 
   <nav class="tabs" id="tabs" role="tablist" aria-label="Settings sections">
@@ -334,6 +336,7 @@
         <input type="text" id="modelCustom" placeholder="onnx-asr model name or Hugging Face repo id" style="flex:1">
       </div>
       <p class="hint" id="modelHint"></p>
+      <p class="hint" id="modelStatus" style="display:none"></p>
       <div class="setting" style="margin-top:6px">
         <span>Language<span class="sub" id="languageSub">Whisper and Canary only</span></span>
         <select id="languageSelect" style="width:210px"></select>
@@ -357,7 +360,12 @@
     <span class="kicker">Updates</span>
     <div class="panel">
       <label class="check setting"><span>Check for updates<span class="sub">Asks GitHub once a day. The only thing Murmur ever sends</span></span><input type="checkbox" id="update_check"></label>
-      <p class="hint">To update whenever you like: quit Murmur, then run <code>murmur --update</code>.</p>
+      <div class="row" style="margin-top:8px;gap:8px;align-items:center">
+        <button class="primary" id="updateNow">Update now</button>
+        <button id="checkUpdate">Check now</button>
+        <span class="hint" id="updateHint" style="margin:0"></span>
+      </div>
+      <p class="hint">Update now installs the newest Murmur and starts it again by itself; nothing to quit and nothing to type. From a terminal, <code>murmur --update</code> does the same.</p>
     </div>
   </section>
   <section>
@@ -451,7 +459,10 @@ function renderPermissions(s) {
 function renderStatus(s) {
   const dot = $("dot");
   let cls = s.state, label = s.state;
-  if (s.state === "idle" && !s.model_ready) { cls = "loading"; label = "loading model"; }
+  if (s.state === "idle" && (!s.model_ready || s.model_loading)) { cls = "loading"; label = "loading model"; }
+  // Nothing loaded and the last attempt failed: say so, rather than showing
+  // "loading model" forever, which is how people decide to reinstall.
+  if (s.state === "idle" && !s.model_ready && !s.model_loading && s.model_error) { cls = "error"; label = "model failed"; }
   if (s.state === "locked") { cls = "recording"; label = "recording"; }
   dot.className = "dot " + cls;
   $("statusText").textContent = label + " · v" + s.version;
@@ -459,11 +470,37 @@ function renderStatus(s) {
   $("offline").style.display = "none";
   renderUpdate(s);
   renderPermissions(s);
+  renderModelStatus(s);
+}
+
+function renderModelStatus(s) {
+  const el = $("modelStatus");
+  let text = "", bad = false;
+  if (s.model_loading) {
+    text = "Loading " + s.model_loading + " in the background. Dictation keeps using the current model until it is ready.";
+  } else if (s.model_error) {
+    text = s.model_error; bad = true;
+  } else if (s.model_notice) {
+    text = s.model_notice;
+  }
+  el.textContent = text;
+  el.className = "hint" + (bad ? " bad" : "");
+  el.style.display = text ? "block" : "none";
+  // A failed swap puts the old model back in the config. Reflect that here
+  // unless the user is in the middle of editing, so their edits are kept.
+  const c = s.config || {};
+  if (!dirty && cfg && typeof cfg === "object" && models.length && c.model &&
+      (c.model !== cfg.model || (c.quantization || null) !== (cfg.quantization || null))) {
+    cfg.model = c.model;
+    cfg.quantization = c.quantization || null;
+    renderModelPicker();
+    $("quantization").value = cfg.quantization || "";
+  }
 }
 function renderOffline() {
   $("dot").className = "dot off";
-  $("statusText").textContent = "not running";
-  $("offline").style.display = "block";
+  $("statusText").textContent = updating ? "restarting" : "not running";
+  if (!updating) $("offline").style.display = "block";
 }
 
 function renderDevices() {
@@ -972,6 +1009,79 @@ $("languageSelect").addEventListener("change", () => {
 });
 $("language").addEventListener("input", () => { cfg.language = $("language").value.trim() || null; setDirty(true); });
 $("quantization").addEventListener("change", () => { cfg.quantization = $("quantization").value || null; setDirty(true); });
+
+// ---- updating from the page ------------------------------------------------
+// One press: Murmur spawns the updater, quits, gets reinstalled, and comes
+// back. The page waits it out and reloads once the new copy is answering.
+let updating = false;
+
+function showUpdating(note) {
+  $("updateBanner").style.display = "none";
+  $("updatingBanner").style.display = "block";
+  $("updatingNote").textContent = note || "";
+}
+
+async function startUpdate(btn) {
+  if (!confirm("Update Murmur now? It closes, installs the newest version, and starts again. Takes about a minute.")) return;
+  btn.disabled = true;
+  let data = {};
+  try {
+    const res = await fetch("/api/update", { method: "POST", headers: HEADERS, body: "{}" });
+    data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Could not start the update.");
+  } catch (e) {
+    btn.disabled = false;
+    $("updateHint").textContent = e.message || "Could not reach Murmur to start the update.";
+    $("updatingBanner").style.display = "block";
+    $("updatingBanner").innerHTML = "";
+    $("updatingBanner").textContent = "The update could not start. " + (e.message || "");
+    return;
+  }
+  updating = true;
+  showUpdating("");
+  waitForRestart();
+}
+
+function waitForRestart() {
+  let wentDown = false, ticks = 0;
+  const tick = async () => {
+    ticks++;
+    try {
+      const res = await fetch("/api/state", { cache: "no-store" });
+      if (res.ok && wentDown) { location.reload(); return; }
+    } catch {
+      wentDown = true;
+    }
+    if (ticks > 150) {  // about five minutes
+      $("updatingNote").textContent = "This is taking longer than expected. If Murmur has not come back, start it with: murmur";
+      return;
+    }
+    setTimeout(tick, 2000);
+  };
+  setTimeout(tick, 1500);
+}
+
+async function checkForUpdate() {
+  const btn = $("checkUpdate");
+  btn.disabled = true;
+  $("updateHint").textContent = "Checking...";
+  try {
+    const res = await fetch("/api/check-update", { method: "POST", headers: HEADERS, body: "{}" });
+    const data = await res.json();
+    const u = data.update || {};
+    renderUpdate({ update: u });
+    $("updateHint").textContent = u.available
+      ? "Murmur " + u.latest + " is available."
+      : (u.latest ? "You have the latest version." : "Could not reach GitHub. Try again when you are online.");
+  } catch {
+    $("updateHint").textContent = "Could not reach Murmur.";
+  }
+  btn.disabled = false;
+}
+
+$("updateNow").addEventListener("click", () => startUpdate($("updateNow")));
+$("updateNowBanner").addEventListener("click", () => startUpdate($("updateNowBanner")));
+$("checkUpdate").addEventListener("click", checkForUpdate);
 
 // ---- dictionary transfer --------------------------------------------------
 $("dictExport").addEventListener("click", () => { window.location.href = "/api/dictionary"; });

@@ -85,6 +85,24 @@ class SettingsServer:
                     return False
                 return True
 
+            def _reply_then_shutdown(self, payload: dict) -> None:
+                # shutdown() stops this very server, so answer first and let
+                # the response reach the caller before pulling the plug.
+                self._json(200, payload)
+                try:
+                    self.wfile.flush()
+                except Exception:
+                    pass
+
+                def _quit() -> None:
+                    time.sleep(0.3)
+                    try:
+                        app.shutdown()
+                    except Exception:
+                        log.exception("shutdown after %s failed", self.path)
+
+                threading.Thread(target=_quit, name="murmur-quit", daemon=True).start()
+
             def do_GET(self):
                 path = self.path.split("?")[0]
                 if path == "/":
@@ -198,22 +216,23 @@ class SettingsServer:
                     # Same exit the tray's Quit takes. `murmur --update` uses
                     # it to close the running copy for you, since Windows
                     # cannot replace files the app still holds open.
-                    self._json(200, {"ok": True})
+                    self._reply_then_shutdown({"ok": True})
+                elif path == "/api/update":
+                    # The settings page's Update button. The updater is spawned
+                    # first, then this copy quits so its files can be replaced;
+                    # the updater puts Murmur back and the page reconnects.
+                    from murmur import updates
+
                     try:
-                        self.wfile.flush()
-                    except Exception:
-                        pass
+                        updates.begin_in_app_update()
+                    except updates.UpdateUnavailable as e:
+                        self._json(400, {"error": str(e)})
+                        return
+                    self._reply_then_shutdown({"ok": True, "restarting": True})
+                elif path == "/api/check-update":
+                    from murmur import updates
 
-                    def _quit() -> None:
-                        # shutdown() stops this very server, so let the
-                        # response above finish reaching the caller first.
-                        time.sleep(0.3)
-                        try:
-                            app.shutdown()
-                        except Exception:
-                            log.exception("shutdown from /api/quit failed")
-
-                    threading.Thread(target=_quit, name="murmur-quit", daemon=True).start()
+                    self._json(200, {"ok": True, "update": updates.check(force=True)})
                 else:
                     self._json(404, {"error": "not found"})
 

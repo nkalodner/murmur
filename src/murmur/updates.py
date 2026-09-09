@@ -311,69 +311,115 @@ def _reinstall_here(uv: str, source: str, restart: bool = False) -> int:
     return 0
 
 
-def _reinstall_detached(uv: str, source: str, restart: bool = False) -> int:
-    r"""Hand the reinstall to a process that outlives this one. Windows only.
+class UpdateUnavailable(RuntimeError):
+    """Raised when an in-app update cannot even start; the message says why."""
 
-    `murmur` runs as Scripts\python.exe INSIDE the tool directory uv has to
-    replace, and Windows will not delete a running executable. Waiting on uv
-    from here therefore destroys the install every time: uv removes Lib and
-    both launchers, reaches its own python.exe, stops with "Access is
-    denied", and leaves no working murmur at all. Quitting the tray app
-    first does not help, because what holds the files is this command.
 
-    So spawn a PowerShell that waits for this PID to exit and only then runs
-    uv, in its own window so the output survives this one closing. POSIX
-    keeps a deleted file alive for the process still running it, so only
-    Windows needs any of this.
+def spawn_detached_update(uv: str, source: str, restart: bool) -> None:
+    """Start a process that outlives this one to run the reinstall.
+
+    The current process holds files uv has to replace (Windows refuses to
+    delete a running executable; POSIX is happier, but an in-app update is
+    replacing the very app that asked for it), so the swap must happen
+    after this PID has exited. The helper waits for that, runs uv pinned to
+    the interpreter already in use, and puts Murmur back if asked to.
+
+    Windows gets a PowerShell in its own window so the output is visible.
+    POSIX gets sh with output appended to ~/.murmur/update.log.
     """
     import os
     import subprocess
 
-    def q(value: str) -> str:  # a PowerShell single-quoted literal
-        return "'" + value.replace("'", "''") + "'"
-
     launcher = _launcher() if restart else None
+    if sys.platform == "win32":
+        def q(value: str) -> str:  # a PowerShell single-quoted literal
+            return "'" + value.replace("'", "''") + "'"
 
-    script = "; ".join(
-        [
-            f"Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue",
-            # The uv trampoline that launched us outlives the python it ran
-            # by a beat, and uv is about to overwrite that very file.
-            "Start-Sleep -Milliseconds 500",
-            " ".join(
-                [f"& {q(uv)} tool install --force --reinstall"]
-                # The flag is a literal; only its value needs quoting.
-                + [a if a.startswith("--") else q(a) for a in _same_python()]
-                + [q(source)]
-            ),
-            "$code = $LASTEXITCODE",
-            # Put Murmur back only if it was up before, and only on a good
-            # swap: relaunching a half-replaced install helps nobody.
-            (
-                f"if ($code -eq 0) {{ Start-Process -FilePath {q(launcher)} }}"
-                if restart and launcher
-                else "$null = $code"
-            ),
-            "if ($code -eq 0) {"
-            f" Write-Host ''; Write-Host {q(_updated_line(restart and bool(launcher)))};"
-            f" Write-Host {q('What changed: ' + CHANGELOG_URL)} "
-            "} else {"
-            f" Write-Host ''; Write-Host 'The update did not finish.';"
-            f" Write-Host {q('Troubleshooting: ' + TROUBLESHOOTING_URL)} "
-            "}",
-            # A success closes itself: leaving a console parked on Enter
-            # forever is worse than a window that blinks. A failure waits,
-            # because that output is the only place the reason appears.
-            "if ($code -eq 0) { Start-Sleep -Seconds 4 } else {"
-            " Write-Host ''; Write-Host 'Press Enter to close.'; Read-Host | Out-Null }",
-        ]
-    )
-    try:
+        script = "; ".join(
+            [
+                f"Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue",
+                # The uv trampoline that launched us outlives the python it ran
+                # by a beat, and uv is about to overwrite that very file.
+                "Start-Sleep -Milliseconds 500",
+                " ".join(
+                    [f"& {q(uv)} tool install --force --reinstall"]
+                    # The flag is a literal; only its value needs quoting.
+                    + [a if a.startswith("--") else q(a) for a in _same_python()]
+                    + [q(source)]
+                ),
+                "$code = $LASTEXITCODE",
+                # Put Murmur back only if it was up before, and only on a good
+                # swap: relaunching a half-replaced install helps nobody.
+                (
+                    f"if ($code -eq 0) {{ Start-Process -FilePath {q(launcher)} }}"
+                    if launcher
+                    else "$null = $code"
+                ),
+                "if ($code -eq 0) {"
+                f" Write-Host ''; Write-Host {q(_updated_line(bool(launcher)))};"
+                f" Write-Host {q('What changed: ' + CHANGELOG_URL)} "
+                "} else {"
+                f" Write-Host ''; Write-Host 'The update did not finish.';"
+                f" Write-Host {q('Troubleshooting: ' + TROUBLESHOOTING_URL)} "
+                "}",
+                # A success closes itself: leaving a console parked on Enter
+                # forever is worse than a window that blinks. A failure waits,
+                # because that output is the only place the reason appears.
+                "if ($code -eq 0) { Start-Sleep -Seconds 4 } else {"
+                " Write-Host ''; Write-Host 'Press Enter to close.'; Read-Host | Out-Null }",
+            ]
+        )
         subprocess.Popen(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
             creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
             close_fds=True,
         )
+        return
+
+    import shlex
+
+    log_path = CONFIG_DIR / "update.log"
+    app_log = CONFIG_DIR / "murmur.log"
+    parts = [
+        f"while kill -0 {os.getpid()} 2>/dev/null; do sleep 0.5; done",
+        "sleep 0.5",
+        " ".join(
+            [shlex.quote(uv), "tool", "install", "--force", "--reinstall"]
+            + [shlex.quote(a) for a in _same_python()]
+            + [shlex.quote(source)]
+        ),
+    ]
+    script = "; ".join(parts)
+    if launcher:
+        # Relaunched already detached and told so, logging where the app
+        # normally logs when it has no terminal.
+        script += (
+            f" && nohup {shlex.quote(launcher)} --foreground "
+            f">> {shlex.quote(str(app_log))} 2>&1 &"
+        )
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "ab") as out:
+        subprocess.Popen(
+            ["sh", "-c", script],
+            stdout=out,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            close_fds=True,
+        )
+
+
+def _reinstall_detached(uv: str, source: str, restart: bool = False) -> int:
+    r"""The Windows half of `murmur --update`.
+
+    `murmur` runs as Scripts\python.exe INSIDE the tool directory uv has to
+    replace, and Windows will not delete a running executable. Waiting on uv
+    from here therefore destroys the install every time: uv removes Lib and
+    both launchers, reaches its own python.exe, stops with "Access is
+    denied", and leaves no working murmur at all. So the work is handed to
+    a process that waits for this one to exit first.
+    """
+    try:
+        spawn_detached_update(uv, source, restart)
     except Exception as e:  # noqa: BLE001 - the advice is the same whatever failed
         print(f"Could not start the updater: {e}")
         print(f"Run this yourself instead:  uv tool install --force --reinstall {source}")
@@ -383,7 +429,28 @@ def _reinstall_detached(uv: str, source: str, restart: bool = False) -> int:
     print()
     print("Windows will not let Murmur replace its own files while this command")
     print("is running, so the update is finishing in a new window.")
-    if restart and launcher:
+    if restart and _launcher():
         print("Murmur starts again by itself once it is done.")
     print("You can close this one.")
     return 0
+
+
+def begin_in_app_update(source: str = INSTALL_URL) -> None:
+    """The settings page's Update button. Spawns the updater and returns;
+    the caller then shuts the app down so the swap can happen.
+
+    Raises UpdateUnavailable with a readable reason when it cannot start.
+    """
+    import shutil
+
+    uv = shutil.which("uv")
+    if not uv:
+        raise UpdateUnavailable(
+            "Murmur cannot find uv, the tool that installs it. In a terminal, run: "
+            f"uv tool install --force --reinstall {source}"
+        )
+    try:
+        spawn_detached_update(uv, source, restart=True)
+    except Exception as e:  # noqa: BLE001 - surfaced verbatim on the page
+        raise UpdateUnavailable(f"Could not start the updater: {e}") from e
+    CACHE_PATH.unlink(missing_ok=True)

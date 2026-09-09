@@ -68,3 +68,47 @@ class Transcriber:
             len(chunks),
         )
         return text
+
+
+# What onnxruntime says when an int8 build arrived intact and the CPU simply
+# cannot run its quantized operators. Distinct from a download failing.
+_INT8_REFUSED = ("NOT_IMPLEMENTED", "ConvInteger", "MatMulInteger", "DynamicQuantizeLinear")
+
+
+def int8_refused(error: BaseException) -> bool:
+    """True when the runtime turned the int8 build down, not the network."""
+    text = str(error)
+    return any(marker in text for marker in _INT8_REFUSED)
+
+
+def load_with_fallback(
+    model: str,
+    quantization: str | None,
+    language: str | None,
+    factory=Transcriber,
+) -> tuple[Transcriber, str | None]:
+    """Load a model; if its int8 build is refused by this CPU, retry at full
+    precision rather than leaving the user with nothing.
+
+    Returns (loaded transcriber, notice). The notice is set only when the
+    fallback happened, so the caller can persist the precision and say so.
+    Raises when nothing loads at all.
+    """
+    first = factory(model, quantization, language)
+    try:
+        first.load()
+        return first, None
+    except Exception as e:
+        if quantization != "int8" or not int8_refused(e):
+            raise
+        log.warning(
+            "The int8 build of %s will not run on this CPU (%s); trying full precision.",
+            model,
+            e,
+        )
+    second = factory(model, None, language)
+    second.load()
+    return second, (
+        "The int8 build of this model will not run on this computer, so Murmur "
+        "switched it to full precision. A bigger download, the same words."
+    )
