@@ -149,22 +149,32 @@ def test_version_regex_misses_cleanly_on_an_unexpected_file():
 
 # -- murmur --update ---------------------------------------------------------
 
+def _stub_lock(monkeypatch, acquired: bool):
+    """Stand in for the instance lock, so these tests do not depend on
+    whether a real Murmur happens to be running on the machine."""
+    import murmur.singleton
+
+    class FakeLock:
+        def acquire(self):
+            return acquired
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(murmur.singleton, "InstanceLock", FakeLock)
+
+
 def test_self_update_refuses_while_murmur_is_running(monkeypatch, capsys):
     # Windows holds the running copy's files open, so uv would fail halfway
     # with a permission error nobody can read. Ask instead.
-    from murmur.singleton import InstanceLock
 
     # self_update() looks for uv before it looks at the lock, so without this
     # stub the test passes or fails on whether the machine happens to have uv
     # installed: green on a dev box, red on a CI runner that has no uv.
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+    _stub_lock(monkeypatch, acquired=False)
 
-    lock = InstanceLock()
-    assert lock.acquire()
-    try:
-        assert updates.self_update() == 1
-    finally:
-        lock.close()
+    assert updates.self_update() == 1
     assert "Quit it first" in capsys.readouterr().out
 
 
@@ -202,6 +212,7 @@ def test_self_update_picks_the_platform_path(monkeypatch):
     # never take the branch that waits on uv in-process.
     calls = []
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+    _stub_lock(monkeypatch, acquired=True)
     monkeypatch.setattr(updates, "_reinstall_here", lambda *a: calls.append("here") or 0)
     monkeypatch.setattr(updates, "_reinstall_detached", lambda *a: calls.append("detached") or 0)
 
