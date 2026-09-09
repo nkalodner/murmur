@@ -181,9 +181,8 @@ def test_self_update_runs_the_reinstall(monkeypatch, capsys):
     class Done:
         returncode = 0
 
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
     monkeypatch.setattr("subprocess.run", lambda cmd, *a, **k: (seen.update(cmd=cmd), Done())[1])
-    assert updates.self_update() == 0
+    assert updates._reinstall_here("/usr/bin/uv", updates.INSTALL_URL) == 0
     assert seen["cmd"][1:4] == ["tool", "install", "--force"]
     assert seen["cmd"][-1] == updates.INSTALL_URL
     assert "Start Murmur again" in capsys.readouterr().out
@@ -193,7 +192,68 @@ def test_self_update_passes_the_failure_code_back(monkeypatch, capsys):
     class Done:
         returncode = 2
 
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
     monkeypatch.setattr("subprocess.run", lambda cmd, *a, **k: Done())
-    assert updates.self_update() == 2
+    assert updates._reinstall_here("/usr/bin/uv", updates.INSTALL_URL) == 2
     assert "did not finish" in capsys.readouterr().out
+
+
+def test_self_update_picks_the_platform_path(monkeypatch):
+    # Windows cannot delete the environment it is running from, so it must
+    # never take the branch that waits on uv in-process.
+    calls = []
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+    monkeypatch.setattr(updates, "_reinstall_here", lambda *a: calls.append("here") or 0)
+    monkeypatch.setattr(updates, "_reinstall_detached", lambda *a: calls.append("detached") or 0)
+
+    monkeypatch.setattr(updates.sys, "platform", "win32")
+    updates.self_update()
+    monkeypatch.setattr(updates.sys, "platform", "darwin")
+    updates.self_update()
+    assert calls == ["detached", "here"]
+
+
+def test_detached_update_waits_for_this_process_before_running_uv(monkeypatch, capsys, tmp_path):
+    # The whole point: uv must not start until this PID is gone, or it
+    # deletes Lib and both launchers and stops on its own python.exe.
+    import os
+    import subprocess
+
+    seen = {}
+    monkeypatch.setattr(
+        subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd, kw=kw) or object()
+    )
+    monkeypatch.setattr(updates, "CACHE_PATH", tmp_path / "update.json")
+    assert updates._reinstall_detached("uv.exe", updates.INSTALL_URL) == 0
+
+    script = seen["cmd"][-1]
+    assert seen["cmd"][0] == "powershell"
+    assert f"Wait-Process -Id {os.getpid()}" in script
+    assert script.index("Wait-Process") < script.index("tool install")
+    assert updates.INSTALL_URL in script
+    # Its own window, or the output dies with this console.
+    assert seen["kw"]["creationflags"] == getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+    assert "new window" in capsys.readouterr().out
+
+
+def test_detached_update_escapes_a_quote_in_the_uv_path(monkeypatch, tmp_path):
+    import subprocess
+
+    seen = {}
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd) or object())
+    monkeypatch.setattr(updates, "CACHE_PATH", tmp_path / "update.json")
+    updates._reinstall_detached("/opt/o'brien/uv", "src")
+    # Doubled, which is how a single quote is escaped in a PowerShell literal.
+    assert "'/opt/o''brien/uv'" in seen["cmd"][-1]
+
+
+def test_the_two_version_strings_agree():
+    # __init__ is what --version prints AND what the update check fetches
+    # from main, so a bump that misses it means nobody is ever told.
+    import re
+    from pathlib import Path
+
+    here = Path(updates.__file__).resolve()
+    root = next(p for p in here.parents if (p / "pyproject.toml").exists())
+    text = (root / "pyproject.toml").read_text(encoding="utf-8")
+    declared = re.search(r'(?m)^version\s*=\s*"([^"]+)"', text).group(1)
+    assert declared == updates.__version__

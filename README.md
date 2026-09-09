@@ -128,6 +128,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 - **The language field stopped claiming a blank box detects.** It does on Whisper, which runs a real detection pass. Canary just decodes as English, and now the hint says so instead of the opposite.
 - **The settings page picks a language from a list too**, instead of a free-text box that would take a code the model was never trained on. It carries the same "Other" escape for anything outside the list, and `murmur --doctor` now prints the language it will actually decode with.
 - **The menu hides itself on Parakeet**, which reads no language code at all.
+- **`murmur --update` no longer breaks itself on Windows.** It ran uv from inside the folder uv had to replace, and Windows will not delete a running program, so the update removed half the install and stopped with "Access is denied", leaving no working `murmur` at all. Quitting first did not help, because the thing holding the files was the update command. It now hands the work to a second window that waits for Murmur to exit before starting. If a past attempt left you stranded, the recovery is in [Troubleshooting](#troubleshooting).
 
 ### 0.12.0
 
@@ -370,7 +371,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 
 - **`uv tool install` fails with "Permission denied" on `~/.cache`** (macOS/Linux): the cache directory is owned by root, usually left behind by an earlier `sudo`. Take it back with `sudo chown -R "$(whoami)" ~/.cache` (and `~/.local` if that one complains too), then reinstall.
 - **`murmur --update` is not a recognized argument**: that command arrived in 0.12.0, so a copy older than that has no `--update` to run. Run the [install](#install) line again. It installs over the old copy and keeps your settings and saved words.
-- **A reinstall fails with "Invalid environment ... missing Python executable", or "Access is denied" on Windows**: uv cannot repair the tool's environment in place, either because it was left half-written (the managed Python it used moved) or because Murmur is still running and Windows has its files locked. Quit Murmur completely first: right-click the tray or menu-bar icon and choose Quit (if it starts at login it may be running on its own). Then remove it and install fresh:
+- **A reinstall fails with "Invalid environment ... missing Python executable", or "Access is denied" on Windows**: uv cannot repair the tool's environment in place, either because it was left half-written (the managed Python it used moved) or because Murmur is still running and Windows has its files locked. On versions before 0.13.0, `murmur --update` caused this by itself on Windows, whether or not anything was running; the recovery below is the same either way. Quit Murmur completely first: right-click the tray or menu-bar icon and choose Quit (if it starts at login it may be running on its own). Then remove it and install fresh:
   - Any platform: `uv tool uninstall murmur-dictation`, then `uv tool install https://github.com/nkalodner/murmur/archive/refs/heads/main.zip`.
   - Windows, if the uninstall still reports "Access is denied": a copy is still holding the files. Stop it and clear the folder in PowerShell, then install again:
     ```powershell
