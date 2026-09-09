@@ -164,20 +164,6 @@ def _stub_lock(monkeypatch, acquired: bool):
     monkeypatch.setattr(murmur.singleton, "InstanceLock", FakeLock)
 
 
-def test_self_update_refuses_while_murmur_is_running(monkeypatch, capsys):
-    # Windows holds the running copy's files open, so uv would fail halfway
-    # with a permission error nobody can read. Ask instead.
-
-    # self_update() looks for uv before it looks at the lock, so without this
-    # stub the test passes or fails on whether the machine happens to have uv
-    # installed: green on a dev box, red on a CI runner that has no uv.
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
-    _stub_lock(monkeypatch, acquired=False)
-
-    assert updates.self_update() == 1
-    assert "Quit it first" in capsys.readouterr().out
-
-
 def test_self_update_without_uv_says_where_to_get_it(monkeypatch, capsys):
     monkeypatch.setattr("shutil.which", lambda name: None)
     assert updates.self_update() == 1
@@ -213,8 +199,8 @@ def test_self_update_picks_the_platform_path(monkeypatch):
     calls = []
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
     _stub_lock(monkeypatch, acquired=True)
-    monkeypatch.setattr(updates, "_reinstall_here", lambda *a: calls.append("here") or 0)
-    monkeypatch.setattr(updates, "_reinstall_detached", lambda *a: calls.append("detached") or 0)
+    monkeypatch.setattr(updates, "_reinstall_here", lambda *a, **k: calls.append("here") or 0)
+    monkeypatch.setattr(updates, "_reinstall_detached", lambda *a, **k: calls.append("detached") or 0)
 
     monkeypatch.setattr(updates.sys, "platform", "win32")
     updates.self_update()
@@ -302,3 +288,66 @@ def test_both_reinstall_paths_pass_the_interpreter(monkeypatch, tmp_path):
     # The flag itself must not be quoted as though it were a path.
     assert " --python '" in script or " --python " in script
     assert "'--python'" not in script
+
+
+def test_update_closes_the_running_copy_instead_of_refusing(monkeypatch, capsys):
+    # Noah's ask: stop making him quit it by hand every time.
+    calls = []
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+    _stub_lock(monkeypatch, acquired=False)  # something is running
+    monkeypatch.setattr(updates, "stop_running_instance", lambda *a, **k: calls.append("stopped") or True)
+    monkeypatch.setattr(updates.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        updates, "_reinstall_here", lambda uv, src, restart=False: calls.append(("here", restart)) or 0
+    )
+
+    assert updates.self_update() == 0
+    assert calls == ["stopped", ("here", True)]
+    assert "Closing the running copy" in capsys.readouterr().out
+
+
+def test_update_gives_up_when_the_copy_will_not_close(monkeypatch, capsys):
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+    _stub_lock(monkeypatch, acquired=False)
+    monkeypatch.setattr(updates, "stop_running_instance", lambda *a, **k: False)
+    monkeypatch.setattr(updates, "_reinstall_here", lambda *a, **k: 1 / 0)  # must not run
+
+    assert updates.self_update() == 1
+    assert "did not close when asked" in capsys.readouterr().out
+
+
+def test_nothing_running_means_no_restart(monkeypatch):
+    seen = {}
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+    _stub_lock(monkeypatch, acquired=True)  # nothing was running
+    monkeypatch.setattr(updates.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        updates, "_reinstall_here", lambda uv, src, restart=False: seen.update(restart=restart) or 0
+    )
+    updates.self_update()
+    assert seen["restart"] is False
+
+
+def test_the_windows_script_relaunches_only_on_a_clean_swap(monkeypatch, tmp_path):
+    import subprocess
+
+    seen = {}
+    monkeypatch.setattr(updates, "CACHE_PATH", tmp_path / "update.json")
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd) or object())
+    monkeypatch.setattr(updates, "_launcher", lambda: "/opt/murmurw")
+
+    updates._reinstall_detached("uv", updates.INSTALL_URL, restart=True)
+    script = seen["cmd"][-1]
+    assert "Start-Process -FilePath '/opt/murmurw'" in script
+    # Guarded by the exit code, so a failed swap does not relaunch a wreck.
+    assert "if ($code -eq 0) { Start-Process" in script
+    assert "running again" in script
+
+    updates._reinstall_detached("uv", updates.INSTALL_URL, restart=False)
+    assert "Start-Process" not in seen["cmd"][-1]
+
+
+def test_stop_returns_true_when_nothing_is_running(monkeypatch):
+    monkeypatch.setattr("murmur.server.find_running_instance", lambda *a, **k: None)
+    # The real lock is free in the test environment, so this returns at once.
+    assert updates.stop_running_instance(timeout=2.0) is True

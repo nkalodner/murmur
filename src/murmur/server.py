@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 
@@ -193,6 +194,26 @@ class SettingsServer:
                         self._json(400, {"error": str(e)})
                         return
                     self._json(200, {"ok": True, "autostart": status})
+                elif path == "/api/quit":
+                    # Same exit the tray's Quit takes. `murmur --update` uses
+                    # it to close the running copy for you, since Windows
+                    # cannot replace files the app still holds open.
+                    self._json(200, {"ok": True})
+                    try:
+                        self.wfile.flush()
+                    except Exception:
+                        pass
+
+                    def _quit() -> None:
+                        # shutdown() stops this very server, so let the
+                        # response above finish reaching the caller first.
+                        time.sleep(0.3)
+                        try:
+                            app.shutdown()
+                        except Exception:
+                            log.exception("shutdown from /api/quit failed")
+
+                    threading.Thread(target=_quit, name="murmur-quit", daemon=True).start()
                 else:
                     self._json(404, {"error": "not found"})
 
