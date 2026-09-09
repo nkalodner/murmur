@@ -274,16 +274,19 @@ def _reinstall_detached(uv: str, source: str) -> int:
                 + [a if a.startswith("--") else q(a) for a in _same_python()]
                 + [q(source)]
             ),
-            "if ($LASTEXITCODE -eq 0) {"
+            "$code = $LASTEXITCODE",
+            "if ($code -eq 0) {"
             f" Write-Host ''; Write-Host 'Updated. Start Murmur again to run the new version.';"
             f" Write-Host {q('What changed: ' + CHANGELOG_URL)} "
             "} else {"
             f" Write-Host ''; Write-Host 'The update did not finish.';"
             f" Write-Host {q('Troubleshooting: ' + TROUBLESHOOTING_URL)} "
             "}",
-            "Write-Host ''",
-            "Write-Host 'Press Enter to close.'",
-            "Read-Host | Out-Null",
+            # A success closes itself: leaving a console parked on Enter
+            # forever is worse than a window that blinks. A failure waits,
+            # because that output is the only place the reason appears.
+            "if ($code -eq 0) { Start-Sleep -Seconds 4 } else {"
+            " Write-Host ''; Write-Host 'Press Enter to close.'; Read-Host | Out-Null }",
         ]
     )
     try:
