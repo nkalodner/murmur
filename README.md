@@ -128,6 +128,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 - **The language field stopped claiming a blank box detects.** It does on Whisper, which runs a real detection pass. Canary just decodes as English, and now the hint says so instead of the opposite.
 - **The settings page picks a language from a list too**, instead of a free-text box that would take a code the model was never trained on. It carries the same "Other" escape for anything outside the list, and `murmur --doctor` now prints the language it will actually decode with.
 - **The menu hides itself on Parakeet**, which reads no language code at all.
+- **Murmur installs onto its own Python now.** Both installers place a uv-managed Python and pin Murmur to it. Before, uv was free to reuse whatever was already on the machine, and on Windows that is often the Microsoft Store Python, whose folders contain reparse points uv cannot delete. That is the real cause behind a cluster of Windows reports: `uv tool list` failing to find Murmur at all, updates dying with "the object manager encountered a reparse point" (os error 4395), and `uv trampoline failed to canonicalize script path`. Updating keeps you on the interpreter you are already running, so nobody drifts back onto it. Existing installs are only fixed by reinstalling: see [Troubleshooting](#troubleshooting).
 - **`murmur --update` no longer breaks itself on Windows.** It ran uv from inside the folder uv had to replace, and Windows will not delete a running program, so the update removed half the install and stopped with "Access is denied", leaving no working `murmur` at all. Quitting first did not help, because the thing holding the files was the update command. It now hands the work to a second window that waits for Murmur to exit before starting. If a past attempt left you stranded, the recovery is in [Troubleshooting](#troubleshooting).
 
 ### 0.12.0
@@ -379,6 +380,13 @@ Every computer is its own setup. The toggle only touches the machine you run it 
     Remove-Item -Recurse -Force "$env:APPDATA\uv\tools\murmur-dictation"
     ```
     If it still will not delete, reboot and run those lines before opening anything else. Your settings (`~/.murmur`) and the downloaded model are untouched.
+- **Windows: `uv trampoline failed to canonicalize script path`, `uv tool list` cannot find Murmur, or an update fails with "the object manager encountered a reparse point" (os error 4395)**: Murmur was installed onto the Microsoft Store Python. uv cannot delete through the reparse points those environments contain, so the install can neither be updated nor cleanly removed. Reinstall onto a Python uv manages itself:
+  ```powershell
+  uv python install 3.12
+  uv tool uninstall murmur-dictation
+  uv tool install --python (uv python find 3.12) https://github.com/nkalodner/murmur/archive/refs/heads/main.zip
+  ```
+  The uninstall may still report the reparse-point error; the install works anyway. If `uv python install` complains about a "minor version link", ignore it, the interpreter is installed (creating that link needs Developer Mode). Confirm with `murmur --doctor`, which prints the Python it is on. Installs from 0.13.0 onward do this by themselves.
 - **Hotkey suddenly does nothing (any platform)**: check the menu bar or tray menu for **Pause dictation**. Paused, Murmur ignores the hotkeys and the idle mic dims until you toggle it back.
 - **Hotkey does nothing (macOS)**: Input Monitoring permission is missing, or it was granted while Murmur was already running. The hotkey only attaches at launch, so the fix is always the same: grant it to your terminal (`murmur --doctor` and the settings page both confirm which state you are in), then quit Murmur and open it again. Granted it and it still does nothing? Restart the computer once; that clears every cached permission state.
 - **Nothing pastes (macOS)**: same story with the Accessibility permission.

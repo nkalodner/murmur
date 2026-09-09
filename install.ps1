@@ -34,6 +34,8 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
     Refresh-Path
 }
 
+$PythonVersion = "3.12"
+
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     Refresh-Path
 }
@@ -44,7 +46,20 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
 
 Write-Host ""
 Write-Host "Installing Murmur (this pulls a Python and builds it; give it a minute)..."
-uv tool install --force --reinstall $Archive
+# Pin a uv-managed Python rather than letting uv reuse whatever is on the box.
+# The Microsoft Store python is the trap: its environments carry reparse points
+# uv cannot delete, so a later update dies with os error 4395 and the launcher
+# stops resolving. `uv python install` can fail on the symlink it makes last
+# while still having installed a working interpreter, so the find comes after
+# and decides on its own.
+uv python install $PythonVersion 2>&1 | Out-Null
+$Python = (uv python find $PythonVersion 2>$null | Select-Object -First 1)
+if ($Python) {
+    uv tool install --force --reinstall --python $Python $Archive
+} else {
+    Write-Host "Could not place a managed Python; using whatever uv picks."
+    uv tool install --force --reinstall $Archive
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Error "uv could not install Murmur. Troubleshooting: https://github.com/nkalodner/murmur#troubleshooting"
     exit $LASTEXITCODE

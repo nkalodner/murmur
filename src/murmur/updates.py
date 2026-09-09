@@ -202,12 +202,33 @@ def self_update(source: str = INSTALL_URL) -> int:
     return _reinstall_here(uv, source)
 
 
+def _same_python() -> list[str]:
+    """`--python` args pinning the update to the interpreter already in use.
+
+    Left to itself uv re-picks a default interpreter, and on Windows that
+    is often the Microsoft Store python. Its environments carry reparse
+    points uv cannot delete, so the NEXT update dies with os error 4395
+    ("the object manager encountered a reparse point") and the launcher
+    stops resolving its script path. Staying on the interpreter that is
+    demonstrably working avoids inheriting that.
+    """
+    from pathlib import Path
+
+    base = Path(sys.base_prefix)
+    exe = base / ("python.exe" if sys.platform == "win32" else "bin/python3")
+    if exe.exists():
+        return ["--python", str(exe)]
+    return ["--python", f"{sys.version_info.major}.{sys.version_info.minor}"]
+
+
 def _reinstall_here(uv: str, source: str) -> int:
     """Run uv and wait for it. Correct everywhere except Windows."""
     import subprocess
 
     try:
-        done = subprocess.run([uv, "tool", "install", "--force", "--reinstall", source])
+        done = subprocess.run(
+            [uv, "tool", "install", "--force", "--reinstall", *_same_python(), source]
+        )
     except Exception as e:  # noqa: BLE001 - any failure here is the same message
         print(f"Could not run uv: {e}")
         return 1
@@ -224,7 +245,7 @@ def _reinstall_here(uv: str, source: str) -> int:
 
 
 def _reinstall_detached(uv: str, source: str) -> int:
-    """Hand the reinstall to a process that outlives this one. Windows only.
+    r"""Hand the reinstall to a process that outlives this one. Windows only.
 
     `murmur` runs as Scripts\python.exe INSIDE the tool directory uv has to
     replace, and Windows will not delete a running executable. Waiting on uv
@@ -247,7 +268,12 @@ def _reinstall_detached(uv: str, source: str) -> int:
     script = "; ".join(
         [
             f"Wait-Process -Id {os.getpid()} -ErrorAction SilentlyContinue",
-            f"& {q(uv)} tool install --force --reinstall {q(source)}",
+            " ".join(
+                [f"& {q(uv)} tool install --force --reinstall"]
+                # The flag is a literal; only its value needs quoting.
+                + [a if a.startswith("--") else q(a) for a in _same_python()]
+                + [q(source)]
+            ),
             "if ($LASTEXITCODE -eq 0) {"
             f" Write-Host ''; Write-Host 'Updated. Start Murmur again to run the new version.';"
             f" Write-Host {q('What changed: ' + CHANGELOG_URL)} "

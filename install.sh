@@ -46,10 +46,22 @@ export PATH
 command -v uv >/dev/null 2>&1 \
   || die "uv installed but is not on PATH. Open a new terminal and run this again."
 
+PYTHON_VERSION="3.12"
+
 say ""
 say "Installing Murmur (this pulls a Python and builds it; give it a minute)..."
-uv tool install --force --reinstall "$ARCHIVE" \
+# Pin a uv-managed Python rather than reusing whatever is on the machine, so a
+# system Python that later moves or disappears cannot strand the install. (The
+# Windows installer does the same for a sharper reason: see install.ps1.)
+uv python install "$PYTHON_VERSION" >/dev/null 2>&1 || true
+PYTHON="$(uv python find "$PYTHON_VERSION" 2>/dev/null | head -n 1 || true)"
+if [ -n "$PYTHON" ]; then
+  uv tool install --force --reinstall --python "$PYTHON" "$ARCHIVE" \
   || die "uv could not install Murmur. Troubleshooting: https://github.com/nkalodner/murmur#troubleshooting"
+else
+  uv tool install --force --reinstall "$ARCHIVE" \
+  || die "uv could not install Murmur. Troubleshooting: https://github.com/nkalodner/murmur#troubleshooting"
+fi
 
 MURMUR="$(command -v murmur || true)"
 say ""
