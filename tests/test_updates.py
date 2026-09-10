@@ -220,6 +220,7 @@ def test_detached_update_waits_for_this_process_before_running_uv(monkeypatch, c
         subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd, kw=kw) or object()
     )
     monkeypatch.setattr(updates, "CACHE_PATH", tmp_path / "update.json")
+    monkeypatch.setattr(updates.sys, "platform", "win32")
     assert updates._reinstall_detached("uv.exe", updates.INSTALL_URL) == 0
 
     script = seen["cmd"][-1]
@@ -238,6 +239,7 @@ def test_detached_update_escapes_a_quote_in_the_uv_path(monkeypatch, tmp_path):
     seen = {}
     monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd) or object())
     monkeypatch.setattr(updates, "CACHE_PATH", tmp_path / "update.json")
+    monkeypatch.setattr(updates.sys, "platform", "win32")
     updates._reinstall_detached("/opt/o'brien/uv", "src")
     # Doubled, which is how a single quote is escaped in a PowerShell literal.
     assert "'/opt/o''brien/uv'" in seen["cmd"][-1]
@@ -333,6 +335,7 @@ def test_the_windows_script_relaunches_only_on_a_clean_swap(monkeypatch, tmp_pat
 
     seen = {}
     monkeypatch.setattr(updates, "CACHE_PATH", tmp_path / "update.json")
+    monkeypatch.setattr(updates.sys, "platform", "win32")
     monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd) or object())
     monkeypatch.setattr(updates, "_launcher", lambda: "/opt/murmurw")
 
