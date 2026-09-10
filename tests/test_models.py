@@ -142,8 +142,10 @@ def test_the_simple_picker_only_names_models_murmur_can_load():
         assert check_model_name(model) is None, model
 
 
-def test_an_older_parakeet_v3_config_has_a_row_to_land_on():
-    from murmur.models import SIMPLE_MODELS, simple_choices
+def test_no_generic_european_row_sits_beside_the_european_languages():
+    # Redundant next to French, German and the rest. The page shows a
+    # generic row only when an older Parakeet v3 config is the current setup.
+    from murmur.models import simple_choices
 
-    eu = next(r for r in simple_choices() if r["code"] == "eu")
-    assert eu["model"] == SIMPLE_MODELS["european"] and eu["language"] is None
+    assert all(r["code"] != "eu" for r in simple_choices())
+    assert all(r["language"] or r["code"] == "en" for r in simple_choices())

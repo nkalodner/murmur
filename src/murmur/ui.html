@@ -817,15 +817,21 @@ function renderSimplePicker() {
   sel.innerHTML = "";
   const add = (v, t) => { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); };
   for (const r of simple) add(r.code, r.name);
-  add("__custom__", "Something else (set up under Advanced)");
   const current = simpleValueFor();
+  // Parakeet v3 with no language (a config from before this picker) has no
+  // row of its own, and listing one for everybody would sit next to the
+  // very languages it stands for. Show it only when it is the current setup.
+  if (current === "eu") add("eu", "A European language (Murmur works out which)");
+  add("__custom__", "Something else (set up under Advanced)");
   sel.value = current;
   if (current === "__custom__") $("advanced").open = true;
 
   const row = simple.find((r) => r.code === current);
   const m = row && models.find((x) => x.name === row.model);
   let hint;
-  if (!row) {
+  if (current === "eu") {
+    hint = "Uses Parakeet v3, which works out which European language you are speaking on its own.";
+  } else if (!row) {
     hint = "Set up under Advanced below.";
   } else {
     // The big Whisper is a repo id, not a curated entry; give it a name.
