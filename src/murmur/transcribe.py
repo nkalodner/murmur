@@ -81,6 +81,17 @@ def int8_refused(error: BaseException) -> bool:
     return any(marker in text for marker in _INT8_REFUSED)
 
 
+def int8_unusable(error: BaseException) -> bool:
+    """True when the compact build is not an option here, for either reason:
+    the CPU refused it, or the repo never shipped one (onnx-asr raises a
+    FileNotFoundError naming the `?int8` pattern it could not match). A
+    network failure is neither, so being offline never triggers the bigger
+    download."""
+    if int8_refused(error):
+        return True
+    return isinstance(error, FileNotFoundError) and "int8" in str(error)
+
+
 def load_with_fallback(
     model: str,
     quantization: str | None,
@@ -99,16 +110,16 @@ def load_with_fallback(
         first.load()
         return first, None
     except Exception as e:
-        if quantization != "int8" or not int8_refused(e):
+        if quantization != "int8" or not int8_unusable(e):
             raise
         log.warning(
-            "The int8 build of %s will not run on this CPU (%s); trying full precision.",
+            "The compact (int8) build of %s is not usable here (%s); trying the full-size one.",
             model,
             e,
         )
     second = factory(model, None, language)
     second.load()
     return second, (
-        "The int8 build of this model will not run on this computer, so Murmur "
-        "switched it to full precision. A bigger download, the same words."
+        "This model has no compact build that runs on this computer, so Murmur is "
+        "using the full-size one. A bigger download, the same words."
     )

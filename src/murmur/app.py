@@ -379,6 +379,7 @@ class App:
         warnings: list[str] = []
         with self._lock:
             old = self.cfg
+            data = precision_for_change(data, old.model)
             new = Config(**{**asdict(old), **data})
             validate(new)
             if new.model != old.model:
@@ -575,7 +576,6 @@ class App:
         try:
             loaded, notice = load_with_fallback(new.model, new.quantization, new.language)
         except Exception as e:  # noqa: BLE001 - every failure is reported the same way
-            precision = new.quantization or "full precision"
             reason = _tidy_error(e)
             with self._lock:
                 if gen != self._load_gen:
@@ -585,12 +585,12 @@ class App:
                     self.cfg = replace(self.cfg, model=old.model, quantization=old.quantization)
                     reverted = self.cfg
                     self._model_error = (
-                        f"Could not load {new.model} ({precision}): {reason}. "
+                        f"Could not load {new.model}: {reason}. "
                         f"Still using {old.model}."
                     )
                 else:
                     reverted = None
-                    self._model_error = f"Could not load {new.model} ({precision}): {reason}"
+                    self._model_error = f"Could not load {new.model}: {reason}"
                 self._set_state(self._state)
             if reverted is not None:
                 save(reverted)
@@ -854,6 +854,18 @@ def language_choices(
     return out
 
 
+def precision_for_change(data: dict, current_model: str) -> dict:
+    """Precision is Murmur's call, decided per model, so the settings page no
+    longer offers it. A change of model therefore restarts on the compact
+    build and lets the loader fall back if it has to; without this, the
+    full-size setting a previous model's fallback stored would follow the
+    user onto a model whose compact build is perfectly fine. A request that
+    names a precision itself (config.json edits, scripts) is left alone."""
+    if "model" in data and data["model"] != current_model and "quantization" not in data:
+        return {**data, "quantization": "int8"}
+    return data
+
+
 def _tidy_error(e: BaseException, limit: int = 220) -> str:
     """One readable line for the settings page: request ids and runs of
     whitespace go, and it is capped so a stack of detail cannot swallow the
@@ -1101,6 +1113,8 @@ def main(argv: list[str] | None = None) -> int:
         if problem:
             log.error("%s", problem)
             return 2
+        if args.model != cfg.model:
+            cfg.quantization = "int8"  # per-model, Murmur's call: see precision_for_change
         cfg.model = args.model
     if args.device:
         cfg.device = args.device
