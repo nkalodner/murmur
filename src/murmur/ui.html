@@ -828,7 +828,9 @@ function renderSimplePicker() {
   if (!row) {
     hint = "Set up under Advanced below.";
   } else {
-    const name = m ? m.label.split(/\s[\u2014-]\s/)[0] : row.model;
+    // The big Whisper is a repo id, not a curated entry; give it a name.
+    const name = m ? m.label.split(/\s[\u2014-]\s/)[0]
+      : (row.model === simpleModels.world ? "Whisper (the large one)" : row.model);
     const size = m ? ", about " + m.download.replace("~", "") + " on first use" : ", about 1.5 GB on first use";
     hint = "Uses " + name + size + ".";
     if (row.model === simpleModels.world) hint += " Pinned to that language, so it never has to guess.";
