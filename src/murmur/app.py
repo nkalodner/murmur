@@ -322,6 +322,9 @@ class App:
         perms = permission_status()
         return {
             "state": state,
+            # For the pre-filled Report an issue link: the OS and version in
+            # words, since nobody should have to know what to include.
+            "platform_detail": _platform_detail(),
             "model_ready": model_ready,
             # The model being loaded in the background, if any, and what the
             # last swap had to say for itself.
@@ -641,6 +644,25 @@ class App:
             )
         ]
 
+    def update_from_tray(self) -> None:
+        """Tray: the same one press as the settings page's Update button.
+
+        Spawns the updater, then quits so the files can be replaced; the
+        updater puts Murmur back. If it cannot even start (no uv on PATH),
+        the settings page is opened instead, since that is where the
+        manual command is shown.
+        """
+        from murmur import updates
+
+        try:
+            updates.begin_in_app_update()
+        except updates.UpdateUnavailable as e:
+            log.error("%s", e)
+            self.open_settings()
+            return
+        log.info("Updating. Murmur closes and comes back by itself.")
+        self.shutdown()
+
     def paste_last_transcript(self) -> None:
         """Tray: re-inject the newest saved dictation at the cursor."""
         text = last_transcript()
@@ -755,6 +777,7 @@ class App:
                         not autostart.status().get("enabled")
                     ),
                     update_available=lambda: bool(updates.status().get("available")),
+                    on_update=self.update_from_tray,
                 )
             except Exception as e:
                 log.warning("Tray unavailable (%s); running without it. Ctrl+C quits.", e)
@@ -857,6 +880,15 @@ def language_choices(
     if current and not seen:
         out.append((f"{current} (not in this model's list)", True, current))
     return out
+
+
+def _platform_detail() -> str:
+    import platform
+
+    try:
+        return platform.platform()
+    except Exception:  # noqa: BLE001 - a cosmetic field must never fail a snapshot
+        return sys.platform
 
 
 def precision_for_change(data: dict, current_model: str) -> dict:

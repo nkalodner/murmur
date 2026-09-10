@@ -281,8 +281,32 @@ def test_tray_paste_disabled_without_history_and_update_row_hidden(monkeypatch):
     assert pause.checked(pause) is True
     login = next(i for i in items if _label(i) == "Start at login")
     assert login.visible(login) is False  # unsupported platform hides it
-    update = next(i for i in items if "Update available" in str(_label(i)))
+    update = next(i for i in items if "Update" in str(_label(i)))
     assert update.visible(update) is True
+    # No on_update given: the row falls back to opening Settings.
+    assert _label(update) == "Update available - open Settings"
+
+
+def test_tray_update_row_runs_the_update_itself_when_offered(monkeypatch):
+    _fake_pystray(monkeypatch)
+    from murmur.tray import Tray
+
+    picked = []
+    tray = Tray(
+        "hint", on_quit=lambda: None, on_settings=lambda: picked.append("settings"),
+        mic_choices=lambda: [], last_transcript=lambda: None,
+        on_paste_last=lambda: None, is_paused=lambda: False,
+        on_toggle_pause=lambda: None,
+        autostart_state=lambda: {"supported": False, "enabled": False},
+        on_toggle_autostart=lambda: None,
+        update_available=lambda: True,
+        on_update=lambda: picked.append("update"),
+    )
+    items = [i for i in tray._icon.menu.items if i != "---"]
+    row = next(i for i in items if _label(i) == "Update Murmur now")
+    assert row.visible(row) is True
+    row.action(tray._icon, row)
+    assert picked == ["update"]  # one click, no detour through Settings
 
 
 def test_tray_action_errors_never_escape(monkeypatch):

@@ -129,6 +129,7 @@ class Tray:
         autostart_state: Callable[[], dict] | None = None,
         on_toggle_autostart: Callable[[], None] | None = None,
         update_available: Callable[[], bool] | None = None,
+        on_update: Callable[[], None] | None = None,
     ):
         import pystray
 
@@ -215,15 +216,15 @@ class Tray:
             )
         if toggles:
             items += [pystray.Menu.SEPARATOR, *toggles]
-        if update_available is not None and on_settings is not None:
+        if update_available is not None and (on_update is not None or on_settings is not None):
             has_update = self._fresh(update_available)
-            items.append(
-                pystray.MenuItem(
-                    "Update available - open Settings",
-                    self._settings,
-                    visible=lambda item: bool(has_update()),
-                )
-            )
+            # One click does the update itself where the app offers that;
+            # otherwise the row opens Settings, which says what to do.
+            if on_update is not None:
+                label, action = "Update Murmur now", self._wrap(on_update, "update")
+            else:
+                label, action = "Update available - open Settings", self._settings
+            items.append(pystray.MenuItem(label, action, visible=lambda item: bool(has_update())))
         items += [pystray.Menu.SEPARATOR, pystray.MenuItem("Quit Murmur", self._quit)]
         menu = pystray.Menu(*items)
         self._icon = pystray.Icon("murmur", icon_for("loading", self._theme), "Murmur", menu)
