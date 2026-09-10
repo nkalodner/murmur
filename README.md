@@ -124,6 +124,8 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 ### 0.14.0
 
 - **Swapping models can no longer leave you with nothing.** The new model downloads and loads in the background while the one you have keeps working, and a pick that fails (a mistyped repo id, a download that dies) puts the old one straight back and says why on the Model tab. Before, a bad pick meant a Murmur that errored on every dictation with nothing to tell you, which is how people ended up reinstalling.
+- **A fresh install opens at login by itself.** A dictation tool you have to remember to start is not there when you need it. The switch on the App tab turns it off; an install that already made its choice is left as it was.
+- **The one-run overrides are gone from the command line.** `--hotkey`, `--model`, `--device`, `--type` and `--no-sounds` duplicated the settings page and were a second way to end up in a state the page did not show (this README used to warn about a stray `--model`). Settings now change in one place. The one-off jobs (`--doctor`, `--update`, `--settings`, `--list-devices`, `--download`, the autostart pair, the dictionary pair) and `--foreground` / `-v` / `--no-tray` stay.
 - **The Model tab asks what you speak.** Nobody outside a chat about speech models knows what Parakeet, Whisper or Canary are, so the page no longer leads with them. Pick a language and Murmur picks the model: the fast default for English, Parakeet v3 for a European language, the big Whisper pinned to the language for anything else. The full list, the Custom field and the language picker live under an Advanced heading for anyone who wants them.
 - **Keys have names now.** The settings page, the tray hint, doctor and the log say Right Ctrl and Left Ctrl + Space instead of `ctrl_r` and `ctrl_l+space`. The config file still uses the short names, which is what the listener reads.
 - **A swap says how big it is.** "Loading Whisper base (about 80 MB) in the background. The first time can take a few minutes." A gigabyte that looks hung after two minutes gets reinstalled; one that said it would take a while gets waited for.
@@ -259,7 +261,7 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 - **Sounds**: chimes on or off, with **Chime volume** and its Play preview on the same row (at 0% nothing sounds and nothing is muted). **Keep the chime out of the take** sits under the slider: the start cue plays while the mic is already open, so without it the model hears the cue and types "mm". It costs the first 0.26s of every take, which buys nothing on headphones where the cue never reaches the mic, so turn it off there. **Quiet other audio** turns the system volume down while you talk and puts it back at the exact level afterward (off by default; macOS and Windows; the slider sets how far down).
 - **Dictionary**: **Word packs** first (see below), then your own vocabulary and replacements. Recent transcripts sit on the same tab, newest first, so testing an entry is dictate, refresh, check, and the keep-history toggle is right beside the list it feeds.
 - **Model**: one question, **What do you speak?** English keeps the fast default. A European language uses Parakeet v3, which works out which one on its own. Anything else uses the big Whisper pinned to that language, since Whisper's own guess is what once turned Mandarin into English words. **Advanced** underneath still has the full model list (Parakeet v2/v3, Whisper base, Canary 1B v2), the Custom field for any onnx-asr name or Hugging Face repo id, and the language picker, which only offers what the chosen model was trained on and is also in the tray menu. A new model downloads and loads in the background while the current one keeps working; if it cannot load, Murmur keeps the old one and the Model tab says why. See [Choosing a model](#choosing-a-model).
-- **App**: Open Murmur at login (Windows and macOS; see [below](#do-i-need-to-keep-the-terminal-open-start-at-login)), the daily update check, which is the only network request Murmur makes and sends nothing about you, an **Update now** button that installs the newest version and restarts Murmur for you (with a Check now beside it), and a Help panel with the version and a Report an issue link.
+- **App**: Open Murmur at login (on for new installs; Windows and macOS; see [below](#do-i-need-to-keep-the-terminal-open-start-at-login)), the daily update check, which is the only network request Murmur makes and sends nothing about you, an **Update now** button that installs the newest version and restarts Murmur for you (with a Check now beside it), and a Help panel with the version and a Report an issue link.
 
 ### The dictionary
 
@@ -328,11 +330,11 @@ murmur --import-dictionary murmur-dictionary.json
 
 Hotkey names come from pynput: `ctrl_r`, `alt_r`, `cmd_r`, `f8`, `pause`, and friends. Join two or three with `+` for a combination (`cmd+shift`). Set either binding to `null` to switch it off; at least one has to stay on. Pick a key that types nothing on its own; bare modifiers work best. On international Windows layouts `alt_r` is AltGr, so prefer `ctrl_r` there.
 
-CLI flags override the config for one run, and a few act and exit:
+The command line is for one-off jobs; settings live on the settings page (and in the config file above), and nowhere else:
 
 ```
-murmur --hotkey f8 --model nemo-parakeet-tdt-0.6b-v3 --type --no-sounds --no-tray -v
-murmur --hotkey2 cmd+shift   # a second hotkey that also starts dictation
+murmur                       # start it; it stays running when the terminal closes
+murmur --foreground -v       # stay attached, with the log, to watch what it does
 murmur --settings            # open the settings page
 murmur --enable-autostart    # start at login (also --disable-autostart)
 murmur --list-devices        # list input devices
@@ -364,7 +366,7 @@ For strong Mandarin, `onnx-community/whisper-large-v3-turbo` is the pick. Its co
 
 ## Do I need to keep the terminal open? Start at login
 
-No. Turn on **Open Murmur at login** in the settings page (Startup section) and Murmur starts by itself, in the tray, with no terminal window. The same switch is available from the command line:
+No. A fresh install opens Murmur at login by itself (since 0.14.0), so after a restart it is simply there in the tray, with no terminal window. If you would rather it did not, the switch is **Open Murmur at login** on the App tab. The same switch is available from the command line:
 
 ```
 murmur --enable-autostart     # start at login from now on
