@@ -208,18 +208,13 @@ def simple_choices() -> list[dict]:
     """Rows for the "What do you speak?" picker: code, name, model, language.
 
     A European pick stores its code even though Parakeet ignores it, so the
-    picker can show "French" back rather than a generic row. The "eu" row
-    stands for a Parakeet v3 config with no language, which is what anyone
-    who chose that model before this picker existed has.
+    picker can show "French" back. A Parakeet v3 config with no language
+    (from before this picker existed) has no row here on purpose: a generic
+    "European" entry would sit right next to the languages it stands for,
+    so the page shows one only when that is the current setup.
     """
     rows = [
         {"code": "en", "name": "English", "model": SIMPLE_MODELS["english"], "language": None},
-        {
-            "code": "eu",
-            "name": "A European language (Murmur works out which)",
-            "model": SIMPLE_MODELS["european"],
-            "language": None,
-        },
     ]
     for code, name in COMMON_LANGUAGES:
         if code == "en":
