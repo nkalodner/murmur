@@ -121,6 +121,10 @@ The exception is a conferencing app configured for exclusive microphone access, 
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
+### 0.15.1
+
+- **The tray always has an update entry.** It read Check for updates until a newer Murmur is known, then Update Murmur now, and one click does whichever applies: a fresh check against GitHub, and either a small "you have the latest" notification or the install and restart. It used to appear only after the daily background check had found something, which is not how anyone expects an app's menu to behave.
+
 ### 0.15.0
 
 - **Swapping models can no longer leave you with nothing.** The new model downloads and loads in the background while the one you have keeps working, and a pick that fails (a mistyped repo id, a download that dies) puts the old one straight back and says why on the Model tab. Before, a bad pick meant a Murmur that errored on every dictation with nothing to tell you, which is how people ended up reinstalling.
@@ -252,7 +256,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 | Quick-tap Right Ctrl | Starts hands-free recording; tap again to finish |
 | Esc while recording | Cancels, nothing is pasted |
 
-The menu bar icon is a small retro microphone that wears the state: white when idle on a dark bar (dark ink on a light one, following your system appearance), red recording, amber transcribing, dimmed while loading or paused. Its menu covers the day-to-day without opening the settings page: switch the microphone, switch the spoken language on a multilingual model, paste the last transcript, pause dictation, toggle Start at login, and quit. Short chimes confirm ready, start, stop, and cancel.
+The menu bar icon is a small retro microphone that wears the state: white when idle on a dark bar (dark ink on a light one, following your system appearance), red recording, amber transcribing, dimmed while loading or paused. Its menu covers the day-to-day without opening the settings page: switch the microphone, switch the spoken language on a multilingual model, paste the last transcript, pause dictation, check for updates (and install one in the same click), toggle Start at login, and quit. Short chimes confirm ready, start, stop, and cancel.
 
 Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches of audio are split at pauses and transcribed piece by piece. Every transcript is also appended to `~/.murmur/history.jsonl`, so pasting into the wrong window never loses your words.
 

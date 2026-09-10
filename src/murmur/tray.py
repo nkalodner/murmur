@@ -218,13 +218,24 @@ class Tray:
             items += [pystray.Menu.SEPARATOR, *toggles]
         if update_available is not None and (on_update is not None or on_settings is not None):
             has_update = self._fresh(update_available)
-            # One click does the update itself where the app offers that;
-            # otherwise the row opens Settings, which says what to do.
             if on_update is not None:
-                label, action = "Update Murmur now", self._wrap(on_update, "update")
+                # Always there, like any app's menu: it checks, and if a newer
+                # Murmur exists it installs it, all from the one click. The
+                # label says which of those it is about to do.
+                items.append(
+                    pystray.MenuItem(
+                        lambda item: "Update Murmur now" if has_update() else "Check for updates",
+                        self._wrap(on_update, "update"),
+                    )
+                )
             else:
-                label, action = "Update available - open Settings", self._settings
-            items.append(pystray.MenuItem(label, action, visible=lambda item: bool(has_update())))
+                items.append(
+                    pystray.MenuItem(
+                        "Update available - open Settings",
+                        self._settings,
+                        visible=lambda item: bool(has_update()),
+                    )
+                )
         items += [pystray.Menu.SEPARATOR, pystray.MenuItem("Quit Murmur", self._quit)]
         menu = pystray.Menu(*items)
         self._icon = pystray.Icon("murmur", icon_for("loading", self._theme), "Murmur", menu)
@@ -299,6 +310,15 @@ class Tray:
             self._on_quit()
         finally:
             icon.stop()
+
+    def notify(self, message: str) -> None:
+        """A small system notification, where the platform has one. The tray
+        is the only surface a menu click has, so "you have the latest" needs
+        somewhere to land."""
+        try:
+            self._icon.notify(message, "Murmur")
+        except Exception as e:  # noqa: BLE001 - no notifications here; the log has it
+            log.debug("notify unavailable: %s", e)
 
     def set_state(self, state: str) -> None:
         self._state = state
