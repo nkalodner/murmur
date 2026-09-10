@@ -84,3 +84,4 @@ if [ "$(uname -s)" = "Darwin" ]; then
 fi
 say "The model downloads once on first use (about 700 MB). Hold Right Ctrl,"
 say "talk, let go. Settings open on the first run; 'murmur --settings' after."
+say "Murmur opens at login from now on; the App tab has the switch."

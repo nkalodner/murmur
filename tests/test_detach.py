@@ -40,8 +40,8 @@ def test_relaunch_passes_the_arguments_through_and_detaches(monkeypatch):
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/murmurw" if name == "murmurw" else None)
     monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd, kw=kw) or object())
 
-    assert _relaunch_detached(["--hotkey", "f8"]) is True
-    assert seen["cmd"] == ["/usr/bin/murmurw", "--foreground", "--hotkey", "f8"]
+    assert _relaunch_detached(["--no-tray"]) is True
+    assert seen["cmd"] == ["/usr/bin/murmurw", "--foreground", "--no-tray"]
     # Detached, or it dies with the terminal that started it.
     assert seen["kw"].get("start_new_session") or seen["kw"].get("creationflags")
 

@@ -882,6 +882,24 @@ def _tidy_error(e: BaseException, limit: int = 220) -> str:
     return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
 
 
+def _open_at_login_from_the_start() -> None:
+    """A dictation tool you have to remember to start is not there when you
+    need it, so a fresh install opens at login from the first run. The App
+    tab shows the switch; turning it off is one click. Never allowed to
+    fail a first run: an install from a checkout has no launcher to point
+    at, and that is fine."""
+    from murmur import autostart
+
+    if not autostart.supported():
+        return
+    try:
+        if not autostart.is_enabled():
+            autostart.enable()
+            log.info("Murmur will open at login from now on (the App tab has the switch).")
+    except Exception as e:  # noqa: BLE001 - a first run must never fail on this
+        log.debug("could not enable start at login: %s", e)
+
+
 def _should_detach(args) -> bool:
     """Whether this run should hand off to the windowless copy.
 
@@ -946,17 +964,10 @@ def main(argv: list[str] | None = None) -> int:
             "Hold a key, talk, release; the words land at your cursor."
         ),
     )
-    parser.add_argument("--hotkey", help="override the hotkey (default ctrl_r)")
-    parser.add_argument(
-        "--hotkey2",
-        help="a second hotkey that also starts dictation; may combine keys with + (e.g. cmd+shift)",
-    )
-    parser.add_argument(
-        "--model", help="override the ASR model (e.g. nemo-parakeet-tdt-0.6b-v3 for multilingual)"
-    )
-    parser.add_argument("--device", help="input device name substring")
-    parser.add_argument("--type", action="store_true", help="type characters instead of pasting")
-    parser.add_argument("--no-sounds", action="store_true", help="disable audio cues")
+    # Settings live on the settings page and in config.json, and nowhere
+    # else: the one-run overrides that used to sit here (--hotkey, --model,
+    # --device, --type, --no-sounds) were a second way to end up in a state
+    # the page did not show, and went in 0.14.0.
     parser.add_argument(
         "--no-tray", action="store_true", help="run without a tray icon (terminal only)"
     )
@@ -1041,6 +1052,8 @@ def main(argv: list[str] | None = None) -> int:
 
     first_run = not CONFIG_PATH.exists()
     cfg = load()
+    if first_run:
+        _open_at_login_from_the_start()
 
     # Dictionary transfer runs on the freshly-loaded config, before any
     # CLI overrides touch it — an import must never persist a --model or
@@ -1098,35 +1111,6 @@ def main(argv: list[str] | None = None) -> int:
                 "(or use Import on its settings page instead)."
             )
         return 0
-
-    if args.hotkey:
-        cfg.hotkey = args.hotkey
-    if args.hotkey2:
-        cfg.hotkey2 = args.hotkey2
-    if args.hotkey or args.hotkey2:
-        from murmur.config import validate_hotkeys
-
-        try:
-            validate_hotkeys(cfg)
-        except ValueError as e:
-            log.error("%s", e)
-            return 2
-    if args.model:
-        from murmur.models import check_model_name
-
-        problem = check_model_name(args.model)
-        if problem:
-            log.error("%s", problem)
-            return 2
-        if args.model != cfg.model:
-            cfg.quantization = "int8"  # per-model, Murmur's call: see precision_for_change
-        cfg.model = args.model
-    if args.device:
-        cfg.device = args.device
-    if args.type:
-        cfg.paste = False
-    if args.no_sounds:
-        cfg.sounds = False
 
     if args.list_devices:
         from murmur.audio import list_input_devices
