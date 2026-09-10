@@ -4,7 +4,7 @@ import json
 import pytest
 
 from murmur.config import Config, hotkey_specs, load, save, validate
-from murmur.hotkey import split_binding
+from murmur.hotkey import display_binding, display_key, split_binding
 
 
 def test_load_creates_default_file(tmp_path):
@@ -175,3 +175,34 @@ def test_hotkey_off_round_trips(tmp_path):
     cfg = Config(hotkey=None, hotkey2="cmd+shift")
     save(cfg, path)
     assert load(path) == cfg
+
+
+
+# -- keys as words ----------------------------------------------------------
+
+def test_display_key_says_what_a_person_would_say():
+    assert display_key("ctrl_r") == "Right Ctrl"
+    assert display_key("ctrl_l") == "Left Ctrl"
+    assert display_key("alt_gr") == "AltGr"
+    assert display_key("space") == "Space"
+    assert display_key("f8") == "F8"
+    assert display_key("a") == "A"
+    assert display_key("page_up") == "Page Up"
+    # Something we never listed is tidied, never rejected.
+    assert display_key("media_play_pause") == "Media Play Pause"
+
+
+def test_the_command_key_has_three_names():
+    assert display_key("cmd", platform="darwin") == "Cmd"
+    assert display_key("cmd", platform="win32") == "Win"
+    assert display_key("cmd", platform="linux") == "Super"
+    assert display_key("cmd_r", platform="darwin") == "Right Cmd"
+
+
+def test_display_binding_joins_a_chord_with_plus_signs():
+    assert display_binding("ctrl_l+space") == "Left Ctrl + Space"
+    assert display_binding("cmd+shift", platform="darwin") == "Cmd + Shift"
+    # A spec split_binding rejects is shown as typed, not raised on: this
+    # feeds log lines and the tray hint.
+    assert display_binding("") == ""
+    assert display_binding("a+a") == "a+a"

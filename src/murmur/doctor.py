@@ -19,7 +19,10 @@ def run(cfg: Config) -> int:
     print(f"  config: {CONFIG_PATH}")
     from murmur.config import hotkey_specs
 
-    hotkeys = " or ".join(hotkey_specs(cfg)) or "none set"
+    from murmur.hotkey import display_binding
+
+    # Words for people, the config name in brackets for anyone editing it.
+    hotkeys = " or ".join(f"{display_binding(s)} ({s})" for s in hotkey_specs(cfg)) or "none set"
     from murmur.models import detects_language, languages_for
 
     # Blank means detect on Whisper and English on Canary, so say which,

@@ -170,7 +170,7 @@
 
       <div class="kicker" style="letter-spacing:.12em;margin-top:18px">First hotkey</div>
       <div class="row" style="margin-top:8px">
-        <span id="keycap" class="keycap">ctrl_r</span>
+        <span id="keycap" class="keycap">Right Ctrl</span>
         <button id="captureBtn" type="button">Change key</button>
         <button id="clearKey1" type="button" class="ghost">Switch off</button>
       </div>
@@ -283,8 +283,12 @@
       <div id="vocabChips" class="chips"></div>
 
       <div class="setting" style="margin-top:6px">
-        <span>Match sensitivity<span class="sub">Left catches more; right is stricter</span></span>
-        <span class="row" style="gap:8px"><input type="range" id="threshold" min="0.70" max="0.95" step="0.01"><span id="thresholdVal" style="font-family:var(--mono);font-size:12px;color:var(--muted)">0.82</span></span>
+        <span>Matching<span class="sub">How close a spoken word has to be to snap to a dictionary entry</span></span>
+        <select id="threshold">
+          <option value="0.90">Strict</option>
+          <option value="0.82">Normal</option>
+          <option value="0.74">Loose</option>
+        </select>
       </div>
     </div>
   </section>
@@ -473,7 +477,14 @@ function renderModelStatus(s) {
   const el = $("modelStatus");
   let text = "", bad = false;
   if (s.model_loading) {
-    text = "Loading " + s.model_loading + " in the background. Dictation keeps using the current model until it is ready.";
+    // Say how big, so a two-minute wait reads as expected rather than hung.
+    const m = models.find((x) => x.name === s.model_loading);
+    const name = m ? m.label.split(/\s[\u2014-]\s/)[0] : s.model_loading;
+    const size = m ? " (about " + m.download.replace("~", "") + ")" : "";
+    const wait = m
+      ? "The first time can take a few minutes."
+      : "A first download can be several hundred MB and take a few minutes.";
+    text = "Loading " + name + size + " in the background. " + wait + " Dictation keeps using the current model until it is ready.";
   } else if (s.model_error) {
     text = s.model_error; bad = true;
   } else if (s.model_notice) {
@@ -677,6 +688,7 @@ function renderPairs() {
 // The curated model menu arrives with /api/state; anything else is Custom.
 let models = [];
 let languages = [];
+let platform = "";
 let packs = [];
 
 function renderModelPicker() {
@@ -756,7 +768,7 @@ function updateModelHint() {
   const known = models.find((m) => m.name === cfg.model);
   if (known) {
     $("modelHint").textContent =
-      `${known.note} Downloads ${known.download} on first use; loads on the next dictation.`;
+      `${known.note} Downloads ${known.download} on first use, in the background.`;
   } else {
     $("modelHint").textContent =
       "Any onnx-asr name or Hugging Face repo id.";
@@ -781,6 +793,7 @@ function renderAll(state) {
   cfg.replacements = (cfg.replacements || []).map((p) => ({ from: p.from || "", to: p.to || "" }));
   devices = state.devices || [];
   models = state.models || [];
+  platform = state.platform || "";
   languages = state.languages || [];
   packs = state.packs || [];
   cfg.dictionary_packs = (cfg.dictionary_packs || []).filter((id) => typeof id === "string");
@@ -788,8 +801,7 @@ function renderAll(state) {
   renderDevices(); renderVocab(); renderPairs(); renderPacks();
   for (const id of ["sounds", "mute_start_cue", "paste", "trailing_space", "history", "pill", "formatting", "format_bare_times", "format_acronyms", "duck_audio", "remove_fillers", "update_check"]) $(id).checked = !!cfg[id];
   for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"]) $(id).value = cfg[id];
-  $("threshold").value = cfg.vocab_threshold;
-  $("thresholdVal").textContent = Number(cfg.vocab_threshold).toFixed(2);
+  $("threshold").value = nearestThreshold(cfg.vocab_threshold);
   renderFormatRules();
   $("duck_percent").value = cfg.duck_percent;
   $("duckPercentVal").textContent = cfg.duck_percent + "%";
@@ -851,9 +863,34 @@ function keyName(code) {
   return null;
 }
 
+// Words for the keys. The config keeps pynput's names (ctrl_r), which is
+// what the listener parses; people read this.
+const KEY_WORDS = {
+  ctrl_l: "Left Ctrl", ctrl_r: "Right Ctrl", ctrl: "Ctrl", alt_l: "Left Alt", alt_r: "Right Alt",
+  alt_gr: "AltGr", alt: "Alt", shift_l: "Left Shift", shift_r: "Right Shift", shift: "Shift",
+  space: "Space", tab: "Tab", enter: "Enter", esc: "Esc", backspace: "Backspace", delete: "Delete",
+  insert: "Insert", caps_lock: "Caps Lock", num_lock: "Num Lock", scroll_lock: "Scroll Lock",
+  page_up: "Page Up", page_down: "Page Down", home: "Home", end: "End", menu: "Menu",
+  pause: "Pause", print_screen: "Print Screen", up: "Up", down: "Down", left: "Left", right: "Right",
+};
+function prettyKey(name) {
+  const n = String(name || "").trim().toLowerCase();
+  const cmd = platform === "darwin" ? "Cmd" : (platform === "win32" ? "Win" : "Super");
+  if (n === "cmd" || n === "cmd_l") return cmd;
+  if (n === "cmd_r") return "Right " + cmd;
+  if (KEY_WORDS[n]) return KEY_WORDS[n];
+  if (n.length === 1) return n.toUpperCase();
+  if (/^f\d{1,2}$/.test(n)) return n.toUpperCase();
+  return n.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function prettyBinding(spec) {
+  if (!spec) return "off";
+  return spec.split("+").map((k) => k.trim()).filter(Boolean).map(prettyKey).join(" + ");
+}
+
 function renderHotkeys() {
-  $("keycap").textContent = cfg.hotkey || "off";
-  $("keycap2").textContent = cfg.hotkey2 || "off";
+  $("keycap").textContent = prettyBinding(cfg.hotkey);
+  $("keycap2").textContent = prettyBinding(cfg.hotkey2);
   $("captureBtn").textContent = cfg.hotkey ? "Change key" : "Set key";
   $("captureBtn2").textContent = cfg.hotkey2 ? "Change key" : "Set second";
   // Switching one off is only offered while the other would still be there,
@@ -897,7 +934,7 @@ document.addEventListener("keydown", (e) => {
   const name = keyName(e.code);
   if (!name) { msg("That key can't be captured; try another.", "err"); return; }
   if (!captureKeys.includes(name) && captureKeys.length < MAX_CHORD_KEYS) captureKeys.push(name);
-  $(CAPTURE_FIELDS[capturing].cap).textContent = captureKeys.join("+");
+  $(CAPTURE_FIELDS[capturing].cap).textContent = captureKeys.map(prettyKey).join(" + ");
 });
 
 document.addEventListener("keyup", (e) => {
@@ -963,9 +1000,17 @@ $("sound_volume").addEventListener("input", () => {
 });
 for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"])
   $(id).addEventListener("input", () => { cfg[id] = parseInt($(id).value, 10); setDirty(true); });
-$("threshold").addEventListener("input", () => {
+// The three words map to numbers on a 0.5-1 scale (config.json still takes
+// any value; a hand-tuned one shows as whichever word is nearest and is left
+// alone until the person picks a different word).
+const THRESHOLD_STEPS = [0.90, 0.82, 0.74];  // Strict, Normal, Loose
+function nearestThreshold(v) {
+  const n = Number(v);
+  const best = THRESHOLD_STEPS.reduce((a, t) => (Math.abs(t - n) < Math.abs(a - n) ? t : a), THRESHOLD_STEPS[1]);
+  return best.toFixed(2);
+}
+$("threshold").addEventListener("change", () => {
   cfg.vocab_threshold = parseFloat($("threshold").value);
-  $("thresholdVal").textContent = cfg.vocab_threshold.toFixed(2);
   setDirty(true);
 });
 $("modelSelect").addEventListener("change", () => {

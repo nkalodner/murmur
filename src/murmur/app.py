@@ -88,7 +88,9 @@ class App:
         """How the hotkeys read in logs and the tray. Either slot may be off."""
         from murmur.config import hotkey_specs
 
-        return " or ".join(hotkey_specs(self.cfg)) or "no hotkey"
+        from murmur.hotkey import display_binding
+
+        return " or ".join(display_binding(s) for s in hotkey_specs(self.cfg)) or "no hotkey"
 
     def _set_state(self, state: State) -> None:
         self._state = state

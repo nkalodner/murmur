@@ -9,6 +9,7 @@ plain key.
 from __future__ import annotations
 
 import logging
+import sys
 from typing import Callable
 
 log = logging.getLogger("murmur")
@@ -20,6 +21,52 @@ COMMON_KEYS = (
 
 CHORD_SEP = "+"
 MAX_CHORD_KEYS = 3
+
+# Words for the key names, for everything a person reads: the tray hint, the
+# settings page keycaps, doctor, the logs. The names themselves stay pynput's,
+# since that is what the config stores and the listener parses.
+_KEY_WORDS = {
+    "ctrl_l": "Left Ctrl", "ctrl_r": "Right Ctrl", "ctrl": "Ctrl",
+    "alt_l": "Left Alt", "alt_r": "Right Alt", "alt_gr": "AltGr", "alt": "Alt",
+    "shift_l": "Left Shift", "shift_r": "Right Shift", "shift": "Shift",
+    "space": "Space", "tab": "Tab", "enter": "Enter", "esc": "Esc",
+    "backspace": "Backspace", "delete": "Delete", "insert": "Insert",
+    "caps_lock": "Caps Lock", "num_lock": "Num Lock", "scroll_lock": "Scroll Lock",
+    "page_up": "Page Up", "page_down": "Page Down", "home": "Home", "end": "End",
+    "menu": "Menu", "pause": "Pause", "print_screen": "Print Screen",
+    "up": "Up", "down": "Down", "left": "Left", "right": "Right",
+}
+
+
+def _cmd_word(platform: str) -> str:
+    # The same physical key has three names depending on the keyboard.
+    return {"darwin": "Cmd", "win32": "Win"}.get(platform, "Super")
+
+
+def display_key(name: str, platform: str = sys.platform) -> str:
+    """'ctrl_r' -> 'Right Ctrl'. Unknown names are tidied, never rejected."""
+    n = name.strip().lower()
+    if n in ("cmd", "cmd_l"):
+        return _cmd_word(platform)
+    if n == "cmd_r":
+        return "Right " + _cmd_word(platform)
+    if n in _KEY_WORDS:
+        return _KEY_WORDS[n]
+    if len(n) == 1:
+        return n.upper()
+    if n.startswith("f") and n[1:].isdigit():
+        return n.upper()
+    return n.replace("_", " ").title()
+
+
+def display_binding(spec: str, platform: str = sys.platform) -> str:
+    """'ctrl_l+space' -> 'Left Ctrl + Space'. A spec that will not split is
+    shown as typed rather than blowing up a log line or the tray."""
+    try:
+        keys = split_binding(spec)
+    except ValueError:
+        return spec
+    return " + ".join(display_key(k, platform) for k in keys)
 
 
 def split_binding(spec: str) -> list[str]:

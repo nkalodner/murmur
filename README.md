@@ -124,6 +124,9 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 ### 0.14.0
 
 - **Swapping models can no longer leave you with nothing.** The new model downloads and loads in the background while the one you have keeps working, and a pick that fails (a mistyped repo id, a download that dies) puts the old one straight back and says why on the Model tab. Before, a bad pick meant a Murmur that errored on every dictation with nothing to tell you, which is how people ended up reinstalling.
+- **Keys have names now.** The settings page, the tray hint, doctor and the log say Right Ctrl and Left Ctrl + Space instead of `ctrl_r` and `ctrl_l+space`. The config file still uses the short names, which is what the listener reads.
+- **A swap says how big it is.** "Loading Whisper base (about 80 MB) in the background. The first time can take a few minutes." A gigabyte that looks hung after two minutes gets reinstalled; one that said it would take a while gets waited for.
+- **Match sensitivity is three words.** The Dictionary tab's 0.70 to 0.95 slider is Strict, Normal or Loose. Normal is what everyone had. `vocab_threshold` in the config still takes any number, and a hand-tuned one shows as the nearest word and is left alone until you pick a different one.
 - **The precision setting is gone.** "int8" versus "full precision" meant nothing to most people and was the wrong thing to have to know about. Murmur now picks for you: every model starts on its compact build, and if this computer cannot run that one, or the model never shipped one, Murmur switches to the full-size build by itself and says so. `quantization` stays in the config file for anyone who wants to force it.
 - **An Update button on the settings page.** The banner that says a new version exists has one now, and so does the App tab, beside a Check now. Press it and Murmur closes, installs the newest version, starts again, and the page reconnects. Nothing to quit, nothing to type.
 - **`murmur` stays running when you close the terminal.** It used to be tied to the window that started it, so leaving it running meant knowing about `murmurw`, the separate windowless launcher. Now `murmur` hands off to that copy itself and hands your prompt back; there is one command to remember. The one-shot commands (`--doctor`, `--update`, `--list-devices` and the rest) still print here as they always did, and `--foreground` keeps it attached when you want to watch it work.
@@ -320,7 +323,7 @@ murmur --import-dictionary murmur-dictionary.json
 | `dictionary_packs` | `[]` | Word packs to switch on, by id (`["qualtrics"]`) |
 | `vocabulary` | `[]` | Dictionary words/phrases, spelled how they should be typed |
 | `replacements` | `[]` | Exact fixes: `{"from": "heard", "to": "typed"}` |
-| `vocab_threshold` | `0.82` | How close a word must sound to snap to vocabulary (lower catches more) |
+| `vocab_threshold` | `0.82` | How close a word must sound to snap to vocabulary (lower catches more). The page offers Strict / Normal / Loose, which are 0.90 / 0.82 / 0.74 |
 
 Hotkey names come from pynput: `ctrl_r`, `alt_r`, `cmd_r`, `f8`, `pause`, and friends. Join two or three with `+` for a combination (`cmd+shift`). Set either binding to `null` to switch it off; at least one has to stay on. Pick a key that types nothing on its own; bare modifiers work best. On international Windows layouts `alt_r` is AltGr, so prefer `ctrl_r` there.
 
