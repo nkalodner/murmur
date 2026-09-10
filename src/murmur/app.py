@@ -645,15 +645,28 @@ class App:
         ]
 
     def update_from_tray(self) -> None:
-        """Tray: the same one press as the settings page's Update button.
+        """Tray: check, and if a newer Murmur exists, install it.
 
-        Spawns the updater, then quits so the files can be replaced; the
-        updater puts Murmur back. If it cannot even start (no uv on PATH),
-        the settings page is opened instead, since that is where the
-        manual command is shown.
+        The row is always in the menu, so this has to cover both halves: a
+        fresh check against GitHub first (the daily one may be hours old, or
+        switched off), then either a notification that this is the latest,
+        or the same one-press update as the settings page's button, which
+        spawns the updater and quits so the files can be replaced. If the
+        updater cannot even start (no uv on PATH), the settings page opens
+        instead, since that is where the manual command is shown.
         """
         from murmur import updates
 
+        info = updates.check(force=True)
+        if not info["available"]:
+            if info["latest"]:
+                message = f"Murmur {info['current']} is the latest version."
+            else:
+                message = "Could not reach GitHub to check for updates."
+            log.info("%s", message)
+            if self.tray:
+                self.tray.notify(message)
+            return
         try:
             updates.begin_in_app_update()
         except updates.UpdateUnavailable as e:
