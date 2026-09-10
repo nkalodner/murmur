@@ -314,7 +314,7 @@ class App:
         except Exception as e:
             log.debug("device listing failed: %s", e)
         from murmur import autostart, updates
-        from murmur.models import COMMON_LANGUAGES, KNOWN_MODELS
+        from murmur.models import COMMON_LANGUAGES, KNOWN_MODELS, SIMPLE_MODELS, simple_choices
         from murmur.packs import catalog as pack_catalog
 
         from murmur.macos import permission_status, restart_needed
@@ -349,6 +349,9 @@ class App:
             # The same (code, name) list the tray menu offers, so the page
             # can filter it per model without a second round trip.
             "languages": [list(pair) for pair in COMMON_LANGUAGES],
+            # The "What do you speak?" picker and the models it maps to.
+            "simple": simple_choices(),
+            "simple_models": SIMPLE_MODELS,
             # Word packs, terms included, so the page can list what each one
             # captures without a second round trip.
             "packs": pack_catalog(),

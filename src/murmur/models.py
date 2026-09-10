@@ -190,3 +190,40 @@ def detects_language(name: str) -> bool:
     """Whether a blank language code means "detect it" for this model."""
     info = model_info(name)
     return info.detects_language if info is not None else True
+
+
+# The settings page asks what you speak, not which model you want. Europe goes
+# to Parakeet v3, which works out the language by itself and is as quick as
+# the default; everything else goes to the big Whisper, the only one that has
+# held up for Mandarin, with the language pinned, because Whisper's own guess
+# is what turned spoken Mandarin into English words in the first place.
+SIMPLE_MODELS = {
+    "english": "nemo-parakeet-tdt-0.6b-v2",
+    "european": "nemo-parakeet-tdt-0.6b-v3",
+    "world": "onnx-community/whisper-large-v3-turbo",
+}
+
+
+def simple_choices() -> list[dict]:
+    """Rows for the "What do you speak?" picker: code, name, model, language.
+
+    A European pick stores its code even though Parakeet ignores it, so the
+    picker can show "French" back rather than a generic row. The "eu" row
+    stands for a Parakeet v3 config with no language, which is what anyone
+    who chose that model before this picker existed has.
+    """
+    rows = [
+        {"code": "en", "name": "English", "model": SIMPLE_MODELS["english"], "language": None},
+        {
+            "code": "eu",
+            "name": "A European language (Murmur works out which)",
+            "model": SIMPLE_MODELS["european"],
+            "language": None,
+        },
+    ]
+    for code, name in COMMON_LANGUAGES:
+        if code == "en":
+            continue
+        model = SIMPLE_MODELS["european"] if code in EUROPEAN_25 else SIMPLE_MODELS["world"]
+        rows.append({"code": code, "name": name, "model": model, "language": code})
+    return rows

@@ -111,3 +111,39 @@ def test_curated_language_codes_stay_inside_the_common_list():
             else [c for c in common if c in m.language_codes]
         )
         assert [c for c, _ in languages_for(m.name)] == expected
+
+
+
+def test_the_simple_picker_covers_every_common_language():
+    from murmur.models import COMMON_LANGUAGES, EUROPEAN_25, SIMPLE_MODELS, simple_choices
+
+    rows = {r["code"]: r for r in simple_choices()}
+    for code, _ in COMMON_LANGUAGES:
+        assert code in rows, code
+    assert rows["en"] == {"code": "en", "name": "English", "model": SIMPLE_MODELS["english"], "language": None}
+    # Europe: Parakeet v3, which detects the language itself; the code is
+    # kept so the picker can show "French" back.
+    assert rows["fr"]["model"] == SIMPLE_MODELS["european"] and rows["fr"]["language"] == "fr"
+    # Everything else: the big Whisper, pinned, because its guess is what
+    # turned Mandarin into English words.
+    assert rows["zh"]["model"] == SIMPLE_MODELS["world"] and rows["zh"]["language"] == "zh"
+    assert rows["ja"]["model"] == SIMPLE_MODELS["world"]
+    for code, r in rows.items():
+        if code in ("en", "eu"):
+            continue
+        expected = SIMPLE_MODELS["european"] if code in EUROPEAN_25 else SIMPLE_MODELS["world"]
+        assert r["model"] == expected, code
+
+
+def test_the_simple_picker_only_names_models_murmur_can_load():
+    from murmur.models import SIMPLE_MODELS, check_model_name
+
+    for model in SIMPLE_MODELS.values():
+        assert check_model_name(model) is None, model
+
+
+def test_an_older_parakeet_v3_config_has_a_row_to_land_on():
+    from murmur.models import SIMPLE_MODELS, simple_choices
+
+    eu = next(r for r in simple_choices() if r["code"] == "eu")
+    assert eu["model"] == SIMPLE_MODELS["european"] and eu["language"] is None

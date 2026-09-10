@@ -28,6 +28,8 @@
   .dot.busy{background:var(--busy)} .dot.loading{background:transparent;border:2px solid var(--faint);width:7px;height:7px}
   .dot.error{background:var(--danger)}
   .hint.bad{color:var(--danger)}
+  details.adv{margin-top:10px} details.adv summary{cursor:pointer;color:var(--muted);font-size:13px;user-select:none}
+  details.adv[open] summary{color:var(--fg);margin-bottom:4px}
   .dot.off{background:transparent;border:2px solid var(--danger);width:7px;height:7px}
   section{margin-top:22px}
   section>.kicker{display:block;margin-bottom:8px}
@@ -329,21 +331,29 @@
   <section>
     <span class="kicker">Speech model</span>
     <div class="panel">
-      <div class="row">
-        <select id="modelSelect" style="flex:1"></select>
+      <div class="setting">
+        <span>What do you speak?<span class="sub">Murmur picks the right speech model for it</span></span>
+        <select id="simpleSelect" style="width:280px"></select>
       </div>
-      <div class="row" id="modelCustomRow" style="display:none;margin-top:8px">
-        <input type="text" id="modelCustom" placeholder="onnx-asr model name or Hugging Face repo id" style="flex:1">
-      </div>
-      <p class="hint" id="modelHint"></p>
+      <p class="hint" id="simpleHint"></p>
       <p class="hint" id="modelStatus" style="display:none"></p>
-      <div class="setting" style="margin-top:6px">
-        <span>Language<span class="sub" id="languageSub">Whisper and Canary only</span></span>
-        <select id="languageSelect" style="width:210px"></select>
-      </div>
-      <div class="row" id="languageCustomRow" style="display:none;margin-top:8px">
-        <input type="text" id="language" placeholder="two-letter code, like en" style="flex:1">
-      </div>
+      <details id="advanced" class="adv">
+        <summary>Advanced: choose the model yourself</summary>
+        <div class="row" style="margin-top:8px">
+          <select id="modelSelect" style="flex:1"></select>
+        </div>
+        <div class="row" id="modelCustomRow" style="display:none;margin-top:8px">
+          <input type="text" id="modelCustom" placeholder="onnx-asr model name or Hugging Face repo id" style="flex:1">
+        </div>
+        <p class="hint" id="modelHint"></p>
+        <div class="setting" style="margin-top:6px">
+          <span>Language<span class="sub" id="languageSub">Whisper and Canary only</span></span>
+          <select id="languageSelect" style="width:210px"></select>
+        </div>
+        <div class="row" id="languageCustomRow" style="display:none;margin-top:8px">
+          <input type="text" id="language" placeholder="two-letter code, like en" style="flex:1">
+        </div>
+      </details>
     </div>
   </section>
   </div>
@@ -689,6 +699,8 @@ function renderPairs() {
 let models = [];
 let languages = [];
 let platform = "";
+let simple = [];
+let simpleModels = {};
 let packs = [];
 
 function renderModelPicker() {
@@ -784,6 +796,45 @@ function updateModelHint() {
     $("languageSub").textContent = "Also in the tray menu. This model has no detect, so it decodes as whatever is picked here";
   }
   renderLanguagePicker();
+  renderSimplePicker();
+}
+
+// ---- the simple picker: a language, not a model name ----------------------
+// Reads the model + language pair back into a language row where it can, and
+// says "Something else" where it cannot, which opens Advanced.
+function simpleValueFor() {
+  const lang = cfg.language || null;
+  if (cfg.model === simpleModels.english) return "en";
+  const row = simple.find((r) => r.model === cfg.model && (r.language || null) === lang);
+  if (row) return row.code;
+  if (cfg.model === simpleModels.european) return "eu";
+  return "__custom__";
+}
+
+function renderSimplePicker() {
+  const sel = $("simpleSelect");
+  if (!sel || !simple.length || !cfg) return;
+  sel.innerHTML = "";
+  const add = (v, t) => { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); };
+  for (const r of simple) add(r.code, r.name);
+  add("__custom__", "Something else (set up under Advanced)");
+  const current = simpleValueFor();
+  sel.value = current;
+  if (current === "__custom__") $("advanced").open = true;
+
+  const row = simple.find((r) => r.code === current);
+  const m = row && models.find((x) => x.name === row.model);
+  let hint;
+  if (!row) {
+    hint = "Set up under Advanced below.";
+  } else {
+    const name = m ? m.label.split(/\s[\u2014-]\s/)[0] : row.model;
+    const size = m ? ", about " + m.download.replace("~", "") + " on first use" : ", about 1.5 GB on first use";
+    hint = "Uses " + name + size + ".";
+    if (row.model === simpleModels.world) hint += " Pinned to that language, so it never has to guess.";
+    if (row.model === simpleModels.european) hint += " Works out which European language you are speaking on its own.";
+  }
+  $("simpleHint").textContent = hint;
 }
 
 function renderAll(state) {
@@ -795,6 +846,8 @@ function renderAll(state) {
   models = state.models || [];
   platform = state.platform || "";
   languages = state.languages || [];
+  simple = state.simple || [];
+  simpleModels = state.simple_models || {};
   packs = state.packs || [];
   cfg.dictionary_packs = (cfg.dictionary_packs || []).filter((id) => typeof id === "string");
   renderHotkeys();
@@ -1042,8 +1095,19 @@ $("languageSelect").addEventListener("change", () => {
   $("languageCustomRow").style.display = "none";
   cfg.language = v || null;
   setDirty(true);
+  renderSimplePicker();
 });
-$("language").addEventListener("input", () => { cfg.language = $("language").value.trim() || null; setDirty(true); });
+$("language").addEventListener("input", () => { cfg.language = $("language").value.trim() || null; setDirty(true); renderSimplePicker(); });
+$("simpleSelect").addEventListener("change", () => {
+  const v = $("simpleSelect").value;
+  if (v === "__custom__") { $("advanced").open = true; renderSimplePicker(); return; }
+  const row = simple.find((r) => r.code === v);
+  if (!row) return;
+  cfg.model = row.model;
+  cfg.language = row.language || null;
+  setDirty(true);
+  renderModelPicker();  // Advanced follows, and re-renders the language picker and this one
+});
 
 // ---- updating from the page ------------------------------------------------
 // One press: Murmur spawns the updater, quits, gets reinstalled, and comes
