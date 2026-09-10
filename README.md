@@ -121,7 +121,7 @@ The exception is a conferencing app configured for exclusive microphone access, 
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
-### 0.14.0
+### 0.15.0
 
 - **Swapping models can no longer leave you with nothing.** The new model downloads and loads in the background while the one you have keeps working, and a pick that fails (a mistyped repo id, a download that dies) puts the old one straight back and says why on the Model tab. Before, a bad pick meant a Murmur that errored on every dictation with nothing to tell you, which is how people ended up reinstalling.
 - **A fresh install opens at login by itself.** A dictation tool you have to remember to start is not there when you need it. The switch on the App tab turns it off; an install that already made its choice is left as it was.
@@ -137,6 +137,8 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 - **Match sensitivity is three words.** The Dictionary tab's 0.70 to 0.95 slider is Strict, Normal or Loose. Normal is what everyone had. `vocab_threshold` in the config still takes any number, and a hand-tuned one shows as the nearest word and is left alone until you pick a different one.
 - **The precision setting is gone.** "int8" versus "full precision" meant nothing to most people and was the wrong thing to have to know about. Murmur now picks for you: every model starts on its compact build, and if this computer cannot run that one, or the model never shipped one, Murmur switches to the full-size build by itself and says so. `quantization` stays in the config file for anyone who wants to force it.
 - **An Update button on the settings page.** The banner that says a new version exists has one now, and so does the App tab, beside a Check now. Press it and Murmur closes, installs the newest version, starts again, and the page reconnects. Nothing to quit, nothing to type.
+### 0.14.0
+
 - **`murmur` stays running when you close the terminal.** It used to be tied to the window that started it, so leaving it running meant knowing about `murmurw`, the separate windowless launcher. Now `murmur` hands off to that copy itself and hands your prompt back; there is one command to remember. The one-shot commands (`--doctor`, `--update`, `--list-devices` and the rest) still print here as they always did, and `--foreground` keeps it attached when you want to watch it work.
 - **`murmur --update` closes Murmur and starts it again for you.** It used to refuse while Murmur was running and tell you to quit it by hand, which was the one manual step left in a one-command update. It now asks the running copy to quit, waits for it to actually let go, updates, and puts it back. Nothing running to begin with means nothing gets started.
 - **The Windows installer no longer dies while placing its Python.** uv reports progress on stderr, and the installer's strict error mode was turning that into a fatal error on every run. Ten minutes old, caught in review, fixed.
@@ -371,7 +373,7 @@ For strong Mandarin, `onnx-community/whisper-large-v3-turbo` is the pick. Its co
 
 ## Do I need to keep the terminal open? Start at login
 
-No. A fresh install opens Murmur at login by itself (since 0.14.0), so after a restart it is simply there in the tray, with no terminal window. If you would rather it did not, the switch is **Open Murmur at login** on the App tab. The same switch is available from the command line:
+No. A fresh install opens Murmur at login by itself (since 0.15.0), so after a restart it is simply there in the tray, with no terminal window. If you would rather it did not, the switch is **Open Murmur at login** on the App tab. The same switch is available from the command line:
 
 ```
 murmur --enable-autostart     # start at login from now on
