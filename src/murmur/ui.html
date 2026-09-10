@@ -221,17 +221,18 @@
     <span class="kicker">What gets typed</span>
     <div class="panel">
       <label class="check setting"><span>Auto-format speech<span class="sub">Spoken times, dates, and numbers come out written</span></span><input type="checkbox" id="formatting"></label>
-      <label class="check setting nested"><span>Times without am or pm<span class="sub">"four thirty" types as 4:30</span></span><input type="checkbox" id="format_bare_times"></label>
-      <label class="check setting nested"><span>Spelled-out letters<span class="sub">"L O L" types as LOL</span></span><input type="checkbox" id="format_acronyms"></label>
+      <details class="adv" id="formatRules">
+        <summary>Fine-tune auto-format</summary>
+        <label class="check setting nested"><span>Times without am or pm<span class="sub">"four thirty" types as 4:30</span></span><input type="checkbox" id="format_bare_times"></label>
+        <label class="check setting nested"><span>Spelled-out letters<span class="sub">"L O L" types as LOL</span></span><input type="checkbox" id="format_acronyms"></label>
+      </details>
       <label class="check setting"><span>Drop filler words<span class="sub">"um" and "uh" are never typed</span></span><input type="checkbox" id="remove_fillers"></label>
       <label class="check setting"><span>Trailing space<span class="sub">Consecutive dictations flow together</span></span><input type="checkbox" id="trailing_space"></label>
-    </div>
-  </section>
-  <section>
-    <span class="kicker">How it lands</span>
-    <div class="panel">
-      <label class="check setting"><span>Paste into apps<span class="sub">Off types character by character instead</span></span><input type="checkbox" id="paste"></label>
-      <div class="setting"><span>Clipboard restore<span class="sub">Delay in ms; -1 keeps the transcript on the clipboard</span></span><input type="number" id="restore_clipboard_ms" min="-1" max="60000"></div>
+      <details class="adv">
+        <summary>Advanced: how the text lands</summary>
+        <label class="check setting"><span>Paste into apps<span class="sub">Off types character by character instead, for the rare app that blocks pasting</span></span><input type="checkbox" id="paste"></label>
+        <div class="setting"><span>Clipboard restore<span class="sub">How long before your previous clipboard comes back, in milliseconds. -1 keeps the transcript there instead</span></span><input type="number" id="restore_clipboard_ms" min="-1" max="60000"></div>
+      </details>
     </div>
   </section>
   </div>
@@ -385,7 +386,7 @@
       gets fixed. Nothing is sent from here; the link just opens GitHub.</p>
       <p class="hint">Murmur <span id="aboutVersion">…</span> ·
       <a href="https://github.com/nkalodner/murmur#readme" target="_blank" rel="noreferrer">Full manual</a> ·
-      <a href="https://github.com/nkalodner/murmur/issues/new" target="_blank" rel="noreferrer">Report an issue</a></p>
+      <a id="reportIssue" href="https://github.com/nkalodner/murmur/issues/new" target="_blank" rel="noreferrer">Report an issue</a></p>
     </div>
   </section>
   <section>
@@ -490,6 +491,23 @@ function renderStatus(s) {
   renderUpdate(s);
   renderPermissions(s);
   renderModelStatus(s);
+  renderIssueLink(s);
+}
+
+// The issue form opens with the version, the OS, the model and the language
+// already written in, so a report is useful without the reporter having to
+// know what to include.
+function renderIssueLink(s) {
+  const c = s.config || {};
+  const facts = [
+    "Murmur " + s.version,
+    s.platform_detail || s.platform || "",
+    "model: " + (c.model || "?"),
+    "language: " + (c.language || "auto"),
+    "precision: " + (c.quantization || "full"),
+  ].filter(Boolean).join(" | ");
+  const body = "**What happened**\n\n\n**What I expected**\n\n\n---\n" + facts + "\n";
+  $("reportIssue").href = "https://github.com/nkalodner/murmur/issues/new?body=" + encodeURIComponent(body);
 }
 
 function renderModelStatus(s) {
@@ -848,7 +866,7 @@ function renderSimplePicker() {
       : (row.model === simpleModels.world ? "Whisper (the large one)" : row.model);
     const size = m ? ", about " + m.download.replace("~", "") + " on first use" : ", about 1.5 GB on first use";
     hint = "Uses " + name + size + ".";
-    if (row.model === simpleModels.world) hint += " Pinned to that language, so it never has to guess.";
+    if (row.model === simpleModels.world) hint += " Pinned to that language, so it never has to guess. Expect a pause of a few seconds after each sentence on a computer without a graphics card.";
     if (row.model === simpleModels.european) hint += " Works out which European language you are speaking on its own.";
   }
   $("simpleHint").textContent = hint;
