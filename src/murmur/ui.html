@@ -327,10 +327,6 @@
     <div class="panel">
       <div class="row">
         <select id="modelSelect" style="flex:1"></select>
-        <select id="quantization">
-          <option value="int8">int8 (fast, default)</option>
-          <option value="">full precision</option>
-        </select>
       </div>
       <div class="row" id="modelCustomRow" style="display:none;margin-top:8px">
         <input type="text" id="modelCustom" placeholder="onnx-asr model name or Hugging Face repo id" style="flex:1">
@@ -489,12 +485,9 @@ function renderModelStatus(s) {
   // A failed swap puts the old model back in the config. Reflect that here
   // unless the user is in the middle of editing, so their edits are kept.
   const c = s.config || {};
-  if (!dirty && cfg && typeof cfg === "object" && models.length && c.model &&
-      (c.model !== cfg.model || (c.quantization || null) !== (cfg.quantization || null))) {
+  if (!dirty && cfg && typeof cfg === "object" && models.length && c.model && c.model !== cfg.model) {
     cfg.model = c.model;
-    cfg.quantization = c.quantization || null;
     renderModelPicker();
-    $("quantization").value = cfg.quantization || "";
   }
 }
 function renderOffline() {
@@ -766,8 +759,7 @@ function updateModelHint() {
       `${known.note} Downloads ${known.download} on first use; loads on the next dictation.`;
   } else {
     $("modelHint").textContent =
-      "Any onnx-asr name or Hugging Face repo id. If a repo has no int8 files, " +
-      "switch to full precision.";
+      "Any onnx-asr name or Hugging Face repo id.";
   }
   // What the picker means differs by model, and getting this wrong is how
   // spoken Mandarin came out as English words: Whisper detects, Canary
@@ -817,7 +809,6 @@ function renderAll(state) {
     : "Floating level bars while you talk (Windows, Linux)";
   renderModelPicker();
   $("language").value = cfg.language || "";
-  $("quantization").value = cfg.quantization || "";
   // Startup is applied immediately (an OS-level, per-machine action), so it
   // lives outside the Save flow and reflects the real system state.
   const as = state.autostart || { supported: false, enabled: false };
@@ -1008,7 +999,6 @@ $("languageSelect").addEventListener("change", () => {
   setDirty(true);
 });
 $("language").addEventListener("input", () => { cfg.language = $("language").value.trim() || null; setDirty(true); });
-$("quantization").addEventListener("change", () => { cfg.quantization = $("quantization").value || null; setDirty(true); });
 
 // ---- updating from the page ------------------------------------------------
 // One press: Murmur spawns the updater, quits, gets reinstalled, and comes
@@ -1179,6 +1169,9 @@ $("autostart").addEventListener("change", async () => {
 
 $("save").addEventListener("click", async () => {
   const payload = { ...cfg };
+  // Precision is Murmur's call, per model (see precision_for_change): the
+  // page never sends it, so a change of model starts on the compact build.
+  delete payload.quantization;
   payload.vocabulary = payload.vocabulary.map((v) => v.trim()).filter(Boolean);
   payload.replacements = payload.replacements
     .map((p) => ({ from: (p.from || "").trim(), to: (p.to || "").trim() }))
