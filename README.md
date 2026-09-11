@@ -121,6 +121,10 @@ The exception is a conferencing app configured for exclusive microphone access, 
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
 
+### 0.15.2
+
+- **Updates install a numbered release.** Update Murmur now and the install lines fetch the newest tagged version instead of whatever happens to be on the main branch at that moment, and every dependency is pinned to the exact version that was tested with it. Every machine gets the same Murmur, and a change that was never tested cannot slip into an update.
+
 ### 0.15.1
 
 - **The tray always has an update entry.** It read Check for updates until a newer Murmur is known, then Update Murmur now, and one click does whichever applies: a fresh check against GitHub, and either a small "you have the latest" notification or the install and restart. It used to appear only after the daily background check had found something, which is not how anyone expects an app's menu to behave.
