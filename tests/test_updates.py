@@ -14,6 +14,9 @@ from murmur import updates
 def cache_in_tmp(tmp_path, monkeypatch):
     """Never read or write the real ~/.murmur/update.json."""
     monkeypatch.setattr(updates, "CACHE_PATH", tmp_path / "update.json")
+    # Keep self-update tests offline while production resolves an immutable
+    # release tag from the latest-version check.
+    monkeypatch.setattr(updates, "_release_source", lambda: updates.INSTALL_URL)
     return tmp_path / "update.json"
 
 
