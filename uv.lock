@@ -307,13 +307,13 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "onnx-asr", extras = ["cpu", "hub"], specifier = ">=0.10,<1" },
-    { name = "pillow", specifier = ">=10" },
-    { name = "pynput", specifier = ">=1.8" },
-    { name = "pyperclip", specifier = ">=1.9" },
-    { name = "pystray", specifier = ">=0.19" },
-    { name = "sounddevice", specifier = ">=0.5" },
-    { name = "soxr", specifier = ">=0.5" },
+    { name = "onnx-asr", extras = ["cpu", "hub"], specifier = "==0.12.0" },
+    { name = "pillow", specifier = "==12.3.0" },
+    { name = "pynput", specifier = "==1.8.2" },
+    { name = "pyperclip", specifier = "==1.11.0" },
+    { name = "pystray", specifier = "==0.19.5" },
+    { name = "sounddevice", specifier = "==0.5.6" },
+    { name = "soxr", specifier = "==1.1.0" },
 ]
 
 [package.metadata.requires-dev]
