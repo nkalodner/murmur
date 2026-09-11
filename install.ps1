@@ -12,7 +12,18 @@
 # tells you exactly where the command landed.
 
 $ErrorActionPreference = "Stop"
-$Archive = "https://github.com/nkalodner/murmur/archive/refs/heads/main.zip"
+$VersionSource = "https://raw.githubusercontent.com/nkalodner/murmur/main/src/murmur/__init__.py"
+try {
+    $VersionFile = Invoke-RestMethod $VersionSource
+} catch {
+    Write-Error "Could not determine the latest Murmur release."
+    exit 1
+}
+if ($VersionFile -notmatch '__version__\s*=\s*["'']([^"'']+)["'']') {
+    Write-Error "The published Murmur version is invalid."
+    exit 1
+}
+$Archive = "https://github.com/nkalodner/murmur/archive/refs/tags/v$($Matches[1]).zip"
 
 function Refresh-Path {
     # uv writes to the user PATH; this process still has the old copy.
