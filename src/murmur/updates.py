@@ -11,9 +11,9 @@ config, no identifier, and nothing comes back but a number. It is a single
 toggle away from off, and it never blocks a recording (it runs on its own
 thread and every failure is swallowed).
 
-There are no GitHub releases to read, since the mirror is a force-pushed
-subtree split, so the version comes from the one file that always holds the
-truth: the package's __init__.
+The version check reads the package's __init__ on the mirror's main branch.
+Installs resolve that version to an immutable release tag, so a retry always
+uses the same source tree even after main advances.
 """
 
 from __future__ import annotations
@@ -34,10 +34,11 @@ VERSION_URL = "https://raw.githubusercontent.com/nkalodner/murmur/main/src/murmu
 CHANGELOG_URL = "https://github.com/nkalodner/murmur#whats-new"
 TROUBLESHOOTING_URL = "https://github.com/nkalodner/murmur"
 CACHE_PATH = CONFIG_DIR / "update.json"
-# What `murmur --update` reinstalls from. The archive rather than the git URL,
-# so updating needs no git and no clone to find: the tarball is the same
-# subtree split the mirror publishes, with pyproject.toml at its root.
-INSTALL_URL = "https://github.com/nkalodner/murmur/archive/refs/heads/main.zip"
+# Release tags are created by the monorepo's mirror workflow. Keep the
+# current-version URL as a stable public constant for diagnostics and tests;
+# self_update resolves the newest checked version before replacing anything.
+RELEASE_ARCHIVE = "https://github.com/nkalodner/murmur/archive/refs/tags/v{version}.zip"
+INSTALL_URL = RELEASE_ARCHIVE.format(version=__version__)
 
 CHECK_INTERVAL = 24 * 60 * 60  # once a day is plenty for a hand-updated tool
 TIMEOUT = 6.0
@@ -212,7 +213,7 @@ def _launcher() -> str | None:
     return shutil.which("murmurw") or shutil.which("murmur")
 
 
-def self_update(source: str = INSTALL_URL) -> int:
+def self_update(source: str | None = None) -> int:
     """Reinstall Murmur over itself. Returns a process exit code.
 
     Updating used to be four manual steps (quit, pull, reinstall, relaunch),
@@ -238,6 +239,13 @@ def self_update(source: str = INSTALL_URL) -> int:
         print("Cannot find uv, which is what installs Murmur.")
         print("Install it from https://docs.astral.sh/uv/, open a new terminal, and try again.")
         return 1
+
+    if source is None:
+        try:
+            source = _release_source()
+        except UpdateUnavailable as e:
+            print(str(e))
+            return 1
 
     lock = InstanceLock()
     was_running = not lock.acquire()
@@ -313,6 +321,17 @@ def _reinstall_here(uv: str, source: str, restart: bool = False) -> int:
 
 class UpdateUnavailable(RuntimeError):
     """Raised when an in-app update cannot even start; the message says why."""
+
+
+def _release_source() -> str:
+    """Resolve the newest published version to its immutable release tag."""
+    info = check(force=True)
+    latest = info.get("latest")
+    if not isinstance(latest, str) or parse_version(latest) is None:
+        raise UpdateUnavailable(
+            "Could not determine the latest release. Check your connection and try again."
+        )
+    return RELEASE_ARCHIVE.format(version=latest)
 
 
 def spawn_detached_update(uv: str, source: str, restart: bool) -> None:
