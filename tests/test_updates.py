@@ -174,6 +174,24 @@ def test_self_update_without_uv_says_where_to_get_it(monkeypatch, capsys):
     assert "uv" in out and "astral.sh" in out
 
 
+def test_in_app_update_resolves_the_latest_release(monkeypatch):
+    latest = "https://github.com/nkalodner/murmur/archive/refs/tags/v9.9.9.zip"
+    seen = {}
+    monkeypatch.setattr(updates, "_release_source", lambda: latest)
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
+    monkeypatch.setattr(
+        updates,
+        "spawn_detached_update",
+        lambda uv, source, restart: seen.update(
+            uv=uv, source=source, restart=restart
+        ),
+    )
+
+    updates.begin_in_app_update()
+
+    assert seen == {"uv": "/usr/bin/uv", "source": latest, "restart": True}
+
+
 def test_self_update_runs_the_reinstall(monkeypatch, capsys):
     seen = {}
 
