@@ -266,6 +266,16 @@ def test_detached_update_escapes_a_quote_in_the_uv_path(monkeypatch, tmp_path):
     assert "'/opt/o''brien/uv'" in seen["cmd"][-1]
 
 
+def test_readme_uses_the_current_immutable_release():
+    from pathlib import Path
+
+    here = Path(updates.__file__).resolve()
+    root = next(p for p in here.parents if (p / "pyproject.toml").exists())
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert f"archive/refs/tags/v{updates.__version__}.zip" in readme
+    assert "archive/refs/heads/main.zip" not in readme
+
+
 def test_the_two_version_strings_agree():
     # __init__ is what --version prints AND what the update check fetches
     # from main, so a bump that misses it means nobody is ever told.
