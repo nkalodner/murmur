@@ -8,14 +8,16 @@ version = "0.15.1"
 description = "Local push-to-talk dictation for Windows and macOS. Hold a key, talk, release; the words land at your cursor. Runs NVIDIA Parakeet, Whisper, or Canary on your machine."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
+# Exact direct pins keep archive installs reproducible. Dependabot owns
+# upgrades; uv.lock pins the complete transitive graph used by CI.
 dependencies = [
-    "onnx-asr[cpu,hub]>=0.10,<1",
-    "sounddevice>=0.5",
-    "soxr>=0.5",
-    "pynput>=1.8",
-    "pystray>=0.19",
-    "pillow>=10",
-    "pyperclip>=1.9",
+    "onnx-asr[cpu,hub]==0.12.0",
+    "sounddevice==0.5.6",
+    "soxr==1.1.0",
+    "pynput==1.8.2",
+    "pystray==0.19.5",
+    "pillow==12.3.0",
+    "pyperclip==1.11.0",
 ]
 
 [project.scripts]
