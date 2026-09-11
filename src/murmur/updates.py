@@ -454,13 +454,18 @@ def _reinstall_detached(uv: str, source: str, restart: bool = False) -> int:
     return 0
 
 
-def begin_in_app_update(source: str = INSTALL_URL) -> None:
+def begin_in_app_update(source: str | None = None) -> None:
     """The settings page's Update button. Spawns the updater and returns;
     the caller then shuts the app down so the swap can happen.
 
-    Raises UpdateUnavailable with a readable reason when it cannot start.
+    Resolves the newest published version to its immutable release tag unless
+    a source is explicitly supplied (primarily useful to tests). Raises
+    UpdateUnavailable with a readable reason when it cannot start.
     """
     import shutil
+
+    if source is None:
+        source = _release_source()
 
     uv = shutil.which("uv")
     if not uv:
