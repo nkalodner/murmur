@@ -15,7 +15,10 @@
 # of the file.
 set -eu
 
-ARCHIVE="https://github.com/nkalodner/murmur/archive/refs/heads/main.zip"
+VERSION_SOURCE="https://raw.githubusercontent.com/nkalodner/murmur/main/src/murmur/__init__.py"
+VERSION="$(curl -LsSf "$VERSION_SOURCE" | sed -n 's/^__version__ = ["'\'']\([^"'\'']*\)["'\'']/\1/p')"
+[ -n "$VERSION" ] || die "could not determine the latest Murmur release."
+ARCHIVE="https://github.com/nkalodner/murmur/archive/refs/tags/v${VERSION}.zip"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'Install failed: %s\n' "$*" >&2; exit 1; }
