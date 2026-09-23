@@ -36,12 +36,27 @@ class FakeApp:
         return []
 
 
+def _free_port() -> int:
+    """A port nothing is using. Never one in the app's own range: on Windows
+    a second server can bind a port a running Murmur already holds, and the
+    write test below would then reach the real settings."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((server.HOST, 0))
+        return s.getsockname()[1]
+
+
 @pytest.fixture(scope="module")
 def started():
     # One server for the module: stopping one waits out a half-second poll.
     app = FakeApp()
     settings = server.SettingsServer(app)
-    assert settings.start(), "no free port for the settings server"
+    port_range = server.PORT_RANGE
+    port = _free_port()
+    server.PORT_RANGE = range(port, port + 1)
+    try:
+        assert settings.start(), "no free port for the settings server"
+    finally:
+        server.PORT_RANGE = port_range
     try:
         yield settings, app
     finally:

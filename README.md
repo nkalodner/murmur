@@ -54,7 +54,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 **2. Open a new terminal window.** Close the one you just used and open a fresh one; only a new window knows where uv landed, so the next step is typed there.
 
-**3. Install Murmur and run it** (either platform). Use the numbered release archive so reinstalling this version always fetches the same tested source:
+**3. Install Murmur and run it** (either platform). Use the numbered release archive so reinstalling this version always fetches the same source:
 
 ```bash
 uv tool install https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.3.zip
