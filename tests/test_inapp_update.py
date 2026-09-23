@@ -62,7 +62,7 @@ def test_in_app_update_explains_itself_when_uv_is_missing(monkeypatch):
     assert "uv tool install" in str(e.value)
 
 
-def test_in_app_update_spawns_with_a_restart_and_clears_the_banner(monkeypatch, tmp_path):
+def test_in_app_update_spawns_with_a_restart_and_clears_the_banner(monkeypatch, tmp_path, version_fetches):
     cache = tmp_path / "update.json"
     cache.write_text("{}")
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/uv")
@@ -75,6 +75,8 @@ def test_in_app_update_spawns_with_a_restart_and_clears_the_banner(monkeypatch, 
     updates.begin_in_app_update()
     assert seen == {"uv": "/usr/bin/uv", "restart": True}
     assert not cache.exists()  # the banner was about a version we are leaving
+    # The release was resolved through conftest's fake, never GitHub.
+    assert len(version_fetches) == 1
 
 
 def test_in_app_update_wraps_a_spawn_failure_readably(monkeypatch):
