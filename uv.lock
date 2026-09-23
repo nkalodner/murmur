@@ -283,7 +283,7 @@ wheels = [
 
 [[package]]
 name = "murmur-dictation"
-version = "0.15.1"
+version = "0.15.3"
 source = { editable = "." }
 dependencies = [
     { name = "onnx-asr", extra = ["cpu", "hub"] },

@@ -1,9 +1,12 @@
 """Local settings server: serves the settings page and applies config changes.
 
-Bound to 127.0.0.1 only. Mutating requests must carry the X-Murmur header
-(which forces a CORS preflight for any cross-origin caller, and we never
-answer preflights) and must not carry a foreign Origin, so a random website
-cannot poke the config from the browser.
+Bound to 127.0.0.1 only. Every request, reads included, must be addressed to
+127.0.0.1 or localhost on our own port: a hostile page can point its own name
+at 127.0.0.1 (DNS rebinding) and read from us as though it were same-origin,
+but the browser still sends that name in the Host header. Mutating requests
+must also carry the X-Murmur header (which forces a CORS preflight for any
+cross-origin caller, and we never answer preflights) and must not carry a
+foreign Origin, so a random website cannot poke the config from the browser.
 """
 
 from __future__ import annotations
@@ -74,6 +77,23 @@ class SettingsServer:
 
             def _json(self, status: int, payload: dict) -> None:
                 self._send(status, json.dumps(payload).encode("utf-8"), "application/json")
+
+            def _addressed_here(self) -> bool:
+                # Exactly one Host, naming this machine and this port, and a
+                # plain path (an absolute-form target names its own host).
+                hosts = self.headers.get_all("Host") or []
+                allowed = (f"{HOST}:{server.port}", f"localhost:{server.port}")
+                return len(hosts) == 1 and hosts[0] in allowed and self.path.startswith("/")
+
+            def parse_request(self) -> bool:
+                # Runs before every do_* handler, whatever the method, so a
+                # request addressed to any other name gets nothing back.
+                if not super().parse_request():
+                    return False
+                if not self._addressed_here():
+                    self._json(403, {"error": "forbidden host"})
+                    return False
+                return True
 
             def _guarded(self) -> bool:
                 origin = self.headers.get("Origin")

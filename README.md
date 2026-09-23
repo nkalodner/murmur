@@ -57,7 +57,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 **3. Install Murmur and run it** (either platform). Use the numbered release archive so reinstalling this version always fetches the same tested source:
 
 ```bash
-uv tool install https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.2.zip
+uv tool install https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.3.zip
 murmur
 ```
 
@@ -120,6 +120,10 @@ The exception is a conferencing app configured for exclusive microphone access, 
 ## What's new
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
+
+### 0.15.3
+
+- **The settings page only answers requests addressed to your own computer.** A web page could use a DNS trick to get your browser to treat it as the settings page, then read your recent transcripts, settings and saved words. Murmur now refuses any request that is not addressed to `127.0.0.1` or `localhost` on its own port, so that trick gets nothing back.
 
 ### 0.15.2
 
@@ -403,7 +407,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 - **`uv tool install` fails with "Permission denied" on `~/.cache`** (macOS/Linux): the cache directory is owned by root, usually left behind by an earlier `sudo`. Take it back with `sudo chown -R "$(whoami)" ~/.cache` (and `~/.local` if that one complains too), then reinstall.
 - **`murmur --update` is not a recognized argument**: that command arrived in 0.12.0, so a copy older than that has no `--update` to run. Run the [install](#install) line again. It installs over the old copy and keeps your settings and saved words.
 - **A reinstall fails with "Invalid environment ... missing Python executable", or "Access is denied" on Windows**: uv cannot repair the tool's environment in place, either because it was left half-written (the managed Python it used moved) or because Murmur is still running and Windows has its files locked. On versions before 0.13.0, `murmur --update` caused this by itself on Windows, whether or not anything was running; the recovery below is the same either way. Quit Murmur completely first: right-click the tray or menu-bar icon and choose Quit (if it starts at login it may be running on its own). Then remove it and install fresh:
-  - Any platform: `uv tool uninstall murmur-dictation`, then `uv tool install https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.2.zip`.
+  - Any platform: `uv tool uninstall murmur-dictation`, then `uv tool install https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.3.zip`.
   - Windows, if the uninstall still reports "Access is denied": a copy is still holding the files. Stop it and clear the folder in PowerShell, then install again:
     ```powershell
     Get-Process murmur*,python*,pythonw* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*uv\tools\murmur-dictation*" } | Stop-Process -Force
@@ -414,7 +418,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
   ```powershell
   uv python install 3.12
   uv tool uninstall murmur-dictation
-  uv tool install --python (uv python find 3.12) https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.2.zip
+  uv tool install --python (uv python find 3.12) https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.3.zip
   ```
   The uninstall may still report the reparse-point error; the install works anyway. If `uv python install` complains about a "minor version link", ignore it, the interpreter is installed (creating that link needs Developer Mode). Confirm with `murmur --doctor`, which prints the Python it is on. Installs from 0.13.0 onward do this by themselves.
 - **Hotkey suddenly does nothing (any platform)**: check the menu bar or tray menu for **Pause dictation**. Paused, Murmur ignores the hotkeys and the idle mic dims until you toggle it back.
