@@ -127,7 +127,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 
 ### 0.15.2
 
-- **Updates install a numbered release.** Update Murmur now and the install lines fetch the newest tagged version instead of whatever happens to be on the main branch at that moment, and every dependency is pinned to the exact version that was tested with it. Every machine gets the same Murmur, and a change that was never tested cannot slip into an update.
+- **Updates install a numbered release.** Update Murmur now and the install lines fetch the newest tagged version instead of whatever happens to be on the main branch at that moment. Every machine on the same version runs the same Murmur code, and later changes cannot slip into a version that is already out. The packages Murmur uses directly are pinned to exact versions; the packages those rely on can still move to newer releases when you install or update. The automated checks use the exact set recorded in the repo's lock file (`uv.lock`).
 
 ### 0.15.1
 
