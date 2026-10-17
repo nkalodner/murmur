@@ -1,6 +1,6 @@
 # Murmur
 
-Local push-to-talk dictation for macOS and Windows. Hold a key, talk, release, and the words land wherever your cursor is. Speech models run entirely on your machine (NVIDIA's Parakeet by default; Whisper and Canary are a settings pick away): free, offline, and nothing you say leaves your computer. MIT licensed.
+Push-to-talk dictation for macOS and Windows that runs on your own computer. Hold a key, talk, let go, and your words show up wherever your cursor is. It uses NVIDIA's Parakeet speech model by default (Whisper and Canary are in settings), works offline, and nothing you say ever leaves your computer. Free and MIT licensed.
 
 I develop Murmur inside my personal site's monorepo, and every change is auto-published to [github.com/nkalodner/murmur](https://github.com/nkalodner/murmur), so the public code always matches what I run.
 
@@ -12,7 +12,7 @@ I develop Murmur inside my personal site's monorepo, and every change is auto-pu
 - Quick-tap the key instead to record hands-free, then tap again to finish. Esc cancels a recording.
 - Transcription runs on your CPU, by default with the compact build of `parakeet-tdt-0.6b-v2`; Whisper, Canary, and other models are one settings change away (see [Choosing a model](#choosing-a-model)). A ten second sentence takes about a second on a modern laptop with the default, punctuation and capitalization included.
 - A local settings page (tray menu, or `murmur --settings`) handles the hotkey, the mic, a personal dictionary, and everything else. It opens by itself the first time you run Murmur. See [Settings](#settings).
-- Switch on a **word pack** and Murmur knows a whole domain's names at once, without typing them out. See [Word packs](#word-packs).
+- Switch on a **word pack** and Murmur learns a whole field's names at once, without you typing them out. See [Word packs](#word-packs).
 
 ## Install
 
@@ -52,7 +52,7 @@ Or on Windows (PowerShell):
 powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-**2. Open a new terminal window.** Close the one you just used and open a fresh one; only a new window knows where uv landed, so the next step is typed there.
+**2. Open a new terminal window.** Close the one you just used and open a new one, since only a new window can find uv. Type the next step there.
 
 **3. Install Murmur and run it** (either platform). Use the numbered release archive so reinstalling this version always fetches the same source:
 
@@ -94,7 +94,7 @@ The short version to forward: **Murmur is a local program with no account, no se
 
 Two things worth knowing before you install it on a managed laptop:
 
-- **On macOS, the permissions are granted to your terminal, not to Murmur.** Murmur runs as a Python program inside Terminal or iTerm, so that is the app macOS asks you to approve for Input Monitoring and Accessibility. Approving it grants those capabilities to anything else you run from that terminal too. That is how any terminal-launched tool works, and it is worth saying out loud rather than letting someone discover it in System Settings.
+- **On macOS, the permissions are granted to your terminal, not to Murmur.** Murmur runs as a Python program inside Terminal or iTerm, so that is the app macOS asks you to approve for Input Monitoring and Accessibility. Approving it grants those capabilities to anything else you run from that terminal too. That's true of any tool you launch from a terminal, so it's better to know up front.
 - **The settings page is served on `127.0.0.1` only**, on a port in the 8766-8775 range, and it is reachable only from your own machine.
 
 If your organization blocks the download, see [Behind a corporate network](#behind-a-corporate-network).
@@ -113,7 +113,7 @@ Nothing above changes what Murmur sends. It only changes where the one-time mode
 
 Taking notes while someone talks is the case Murmur is best at, and it works: macOS and Windows both let more than one program open the same microphone, so Murmur can record while Zoom, Teams, or Meet has the mic. Mute yourself in the call, hold the key, and talk into your notes.
 
-Two things to set up first, both on the Sounds tab. Turn **Chimes** down or off, since anything Murmur plays goes out of your speakers and into the call if you are not on headphones. And if you *are* on headphones, turn off **Keep the chime out of the take**, which buys back the fraction of a second it mutes at the start of each take (the cue cannot reach your mic through headphones anyway).
+Two things to set up first, both on the Sounds tab. Turn **Chimes** down or off, since anything Murmur plays goes out of your speakers and into the call if you are not on headphones. And if you *are* on headphones, turn off **Keep the chime out of the take**, which skips the short mute at the start of each take (the cue cannot reach your mic through headphones anyway).
 
 The exception is a conferencing app configured for exclusive microphone access, which is rare and not the default anywhere. If Murmur records silence while you are in a call, that is what to look at.
 
@@ -286,17 +286,17 @@ Recordings stop automatically after 2 minutes (`max_seconds`). Longer stretches 
 
 #### Word packs
 
-Curated dictionaries that ship with Murmur, on the Dictionary tab. Switch one on and Murmur knows a whole domain's names at once, instead of everybody on a team independently discovering that "XM" comes out as "ex em".
+Ready-made word lists that come with Murmur, on the Dictionary tab. Switch one on and Murmur learns a whole field's names at once, so nobody on a team has to find out on their own that "XM" comes out as "ex em".
 
 - **Qualtrics** is the first one: the products (CoreXM, EmployeeXM, XM Discover, Stats iQ, and the rest), the platform features named the way the support site titles them (Survey Flow, Display Logic, Skip Logic, Embedded Data, Piped Text, Question Block, Matrix Table, Constant Sum, Net Promoter Score, Contact List, Anonymous Link, Employee Lifecycle), the measures (NPS, CSAT, CES, eNPS), the acronyms product managers say all day (OKR, PRD, SLA, ARR, SOC 2), and the tools that come up by name constantly. It also fixes the mishearings, so "quality tricks" types as `Qualtrics`, "see sat" as `CSAT`, "pipe text" as `Piped Text`, "a b test" as `A/B test`, "p zero" as `P0`, and "three sixty" as `360`.
 
-**Show terms** on a pack's row lists every word and every heard-to-typed pair it contains, because switching on a dictionary you cannot read is a leap of faith.
+**Show terms** on a pack's row lists every word and every heard-to-typed pair it contains, so you can see exactly what a pack changes before you turn it on.
 
 Packs never touch your own vocabulary and replacements. They are merged in when a transcript is processed, with **your entries first**, so a personal fix always beats a pack's and nothing a pack ships can end up in your export as if you had typed it. Turning a pack off takes its terms with it, and updating Murmur updates the pack. In the config the setting is a list of ids: `"dictionary_packs": ["qualtrics"]`.
 
 Anything that is also an ordinary English word stays out of a pack on purpose. A vocabulary entry for "Slack" would recase "some slack in the timeline", and one for "Zoom" would recase "zoom in on the funnel", so those are left to the model, which already spells them right as product names. The same rule is why the platform features are all multi-word: "Question Block" is in, "block" on its own is not.
 
-A product name does not have to be spelled like an everyday word to swallow one. Vocabulary snapping is fuzzy, so a name that merely starts with a common word is close enough to catch it: "CrossXM" would rewrite "we can cross that bridge", and "Tableau" would rewrite "let us table that". Those names live in the pack as exact heard-to-typed pairs instead, so saying "cross x m" still types `CrossXM` while the everyday word passes through untouched. Two tests hold the line, one dictating ordinary sentences full of the pack's near-miss words and one running every common word through the real matcher.
+A product name does not have to be spelled like an everyday word to swallow one. Vocabulary snapping is fuzzy, so a name that merely starts with a common word is close enough to catch it: "CrossXM" would rewrite "we can cross that bridge", and "Tableau" would rewrite "let us table that". Those names live in the pack as exact heard-to-typed pairs instead, so saying "cross x m" still types `CrossXM` while the everyday word passes through untouched. Two tests check this, one dictating ordinary sentences full of the pack's near-miss words and one running every common word through the real matcher.
 
 #### Your own words
 
@@ -372,7 +372,7 @@ The settings page asks what you speak and picks one of these; Advanced lists the
 | --- | --- | --- | --- |
 | `nemo-parakeet-tdt-0.6b-v2` | English | ~700 MB | The default. Best accuracy for its speed on a CPU. |
 | `nemo-parakeet-tdt-0.6b-v3` | 25 European languages | ~700 MB | Same family and speed as v2, auto-detects the language. |
-| `whisper-base` | 99 languages | ~80 MB | Lightest and quickest to try, widest language list, noticeably softer accuracy. Set a language code if it guesses wrong. |
+| `whisper-base` | 99 languages | ~80 MB | Lightest and quickest to try, widest language list, noticeably less accurate. Set a language code if it guesses wrong. |
 | `nemo-canary-1b-v2` | 25 European languages | ~1 GB | The most accurate multilingual option, with a longer pause after speaking on CPU. |
 
 The Custom field takes anything else onnx-asr can load: its other aliases (the GigaAM and FastConformer families for Russian, `nemo-parakeet-ctc-0.6b`, and so on) or any Hugging Face repo id with a slash, like `onnx-community/whisper-large-v3-turbo` for Whisper's strongest open model. Two notes on custom repos: not all of them ship a compact build this CPU can run, in which case Murmur uses the full-size one by itself and says so on the Model tab, and bigger Whisper models get slow on a CPU. The `language` setting (two letters, like `en`) is read by Whisper and Canary; Parakeet ignores it. It is also in the tray menu, under **Language**.
@@ -430,12 +430,12 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 - **Clipboard contents vanished**: Murmur restores text clipboards after pasting, but images and files are lost. Set `restore_clipboard_ms` to `-1` if you would rather keep the transcript on the clipboard.
 - **It does not start at login (Windows)**: run `murmur --enable-autostart` and confirm it prints "Murmur will start at login." Startup is per-machine, so enabling it on your Mac never sets up Windows. Murmur should then appear under Task Manager > Startup Apps; if that list shows it as *Disabled*, right-click and choose Enable, since Windows keeps its own on/off flag that can override the entry. If the command reports it cannot find `murmur` on PATH, run `uv tool update-shell`, open a fresh terminal, and try again. After a `uv tool` reinstall or upgrade that moves the command, run the enable line once more to refresh the path it points at.
 - **Enabling reports that Windows removed the startup entry**: some antivirus and "startup manager" tools revert startup changes made by apps they do not recognize. On Windows, Murmur starts by placing a shortcut in your Startup folder (these tools usually leave it alone), and only falls back to a registry entry if the folder is blocked too. If it reports both were removed, allow Murmur (`murmurw.exe`) in that tool, or add the shortcut yourself: press Win+R, run `shell:startup`, and drop a shortcut to `murmurw.exe` in the folder that opens.
-- **"Murmur is already running, so this copy will not start"**: exactly what it says, and it is a guard, not an error. Only one copy runs at a time, because two would each transcribe and paste the same speech, typing everything twice. Use the copy already running (its tray or menu-bar icon, or `murmur --settings`), or quit that one first if you want a fresh start. This is the common surprise when Murmur starts at login and you also launch it in a terminal.
+- **"Murmur is already running, so this copy will not start"**: that's expected. Only one copy runs at a time, because two would each transcribe and paste the same speech, typing everything twice. Use the copy already running (its tray or menu-bar icon, or `murmur --settings`), or quit that one first if you want a fresh start. This is the common surprise when Murmur starts at login and you also launch it in a terminal.
 - **Model download failed midway**: rerun `murmur --download`; it resumes.
 - **Wrong mic**: pick it in the settings page, or `murmur --list-devices` and set `device` to a name substring.
 - **A word keeps coming out wrong**: add it to the vocabulary (settings page), or add an exact replacement if the model mishears it the same way every time.
 - **Something gets rewritten and you did not ask for it**: check the Dictionary tab for a word pack that is on (**Show terms** lists everything it changes), then the Typing tab, where **Times without am or pm** and **Spelled-out letters** each switch off on their own. Your own replacement always beats a pack's, so adding the pair you want is another way out.
-- **The first word of a take gets clipped**: Murmur mutes the mic for 0.26s while the start chime plays. On headphones the chime cannot reach the mic anyway, so turn off **Keep the chime out of the take** on the Sounds tab and that time comes back.
+- **The first word of a take gets clipped**: Murmur mutes the mic for 0.26s while the start chime plays. On headphones the chime cannot reach the mic anyway, so turn off **Keep the chime out of the take** on the Sounds tab to skip that short mute.
 
 ## Development
 
