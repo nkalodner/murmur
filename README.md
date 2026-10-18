@@ -6,7 +6,7 @@ I develop Murmur inside my personal site's monorepo, and every change is auto-pu
 
 ## How it works
 
-- A small tray app watches up to two global hotkeys (Right Ctrl by default), either of which can be a key combination, and either of which can be switched off.
+- A small tray app watches up to two global hotkeys (Right Ctrl by default, Right Command on a Mac), either of which can be a key combination, and either of which can be switched off.
 - Only one copy runs at a time. Starting a second one exits with a note instead, since two would type every dictation twice.
 - Hold the key and speak. Release, and Murmur transcribes on the machine and pastes the text into whatever app has focus.
 - Quick-tap the key instead to record hands-free, then tap again to finish. Esc cancels a recording.
@@ -57,7 +57,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 **3. Install Murmur and run it** (either platform). Use the numbered release archive so reinstalling this version always fetches the same source:
 
 ```bash
-uv tool install https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.3.zip
+uv tool install https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.4.zip
 murmur
 ```
 
@@ -120,6 +120,10 @@ The exception is a conferencing app configured for exclusive microphone access, 
 ## What's new
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
+
+### 0.15.4
+
+- **A Mac starts on Right Command.** Mac keyboards, every MacBook included, have no Right Ctrl, so a fresh Mac install used to listen for a key that wasn't there. New Mac installs now start on Right Command. An existing install keeps whatever key it already has; pick Right Command on the settings page if you want it.
 
 ### 0.15.3
 
@@ -259,9 +263,9 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 
 | Action | What happens |
 | --- | --- |
-| Hold Right Ctrl, speak, release | Transcribes and pastes at your cursor |
+| Hold Right Ctrl (Right Command on a Mac), speak, release | Transcribes and pastes at your cursor |
 | Hold your second hotkey (if set) | Exactly the same, from whichever key or combination you bound |
-| Quick-tap Right Ctrl | Starts hands-free recording; tap again to finish |
+| Quick-tap the same key | Starts hands-free recording; tap again to finish |
 | Esc while recording | Cancels, nothing is pasted |
 
 The menu bar icon is a small retro microphone that wears the state: white when idle on a dark bar (dark ink on a light one, following your system appearance), red recording, amber transcribing, dimmed while loading or paused. Its menu covers the day-to-day without opening the settings page: switch the microphone, switch the spoken language on a multilingual model, paste the last transcript, pause dictation, check for updates (and install one in the same click), toggle Start at login, and quit. Short chimes confirm ready, start, stop, and cancel.
@@ -318,7 +322,7 @@ murmur --import-dictionary murmur-dictionary.json
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `hotkey` | `"ctrl_r"` | The push-to-talk key (pynput names); `null` switches it off |
+| `hotkey` | `"ctrl_r"` (`"cmd_r"` on a Mac) | The push-to-talk key (pynput names); `null` switches it off |
 | `hotkey2` | `null` | A second binding that also starts dictation; join keys with `+` (`"cmd+shift"`) |
 | `model` | `"nemo-parakeet-tdt-0.6b-v2"` | Any onnx-asr model name |
 | `quantization` | `"int8"` | Murmur's call, not on the settings page: the compact build first, falling back to the full-size one (`null`) by itself when the compact one will not load. Set `null` here to force full size; a change of model resets it |
@@ -407,7 +411,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 - **`uv tool install` fails with "Permission denied" on `~/.cache`** (macOS/Linux): the cache directory is owned by root, usually left behind by an earlier `sudo`. Take it back with `sudo chown -R "$(whoami)" ~/.cache` (and `~/.local` if that one complains too), then reinstall.
 - **`murmur --update` is not a recognized argument**: that command arrived in 0.12.0, so a copy older than that has no `--update` to run. Run the [install](#install) line again. It installs over the old copy and keeps your settings and saved words.
 - **A reinstall fails with "Invalid environment ... missing Python executable", or "Access is denied" on Windows**: uv cannot repair the tool's environment in place, either because it was left half-written (the managed Python it used moved) or because Murmur is still running and Windows has its files locked. On versions before 0.13.0, `murmur --update` caused this by itself on Windows, whether or not anything was running; the recovery below is the same either way. Quit Murmur completely first: right-click the tray or menu-bar icon and choose Quit (if it starts at login it may be running on its own). Then remove it and install fresh:
-  - Any platform: `uv tool uninstall murmur-dictation`, then `uv tool install https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.3.zip`.
+  - Any platform: `uv tool uninstall murmur-dictation`, then `uv tool install https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.4.zip`.
   - Windows, if the uninstall still reports "Access is denied": a copy is still holding the files. Stop it and clear the folder in PowerShell, then install again:
     ```powershell
     Get-Process murmur*,python*,pythonw* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*uv\tools\murmur-dictation*" } | Stop-Process -Force
@@ -418,14 +422,14 @@ Every computer is its own setup. The toggle only touches the machine you run it 
   ```powershell
   uv python install 3.12
   uv tool uninstall murmur-dictation
-  uv tool install --python (uv python find 3.12) https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.3.zip
+  uv tool install --python (uv python find 3.12) https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.4.zip
   ```
   The uninstall may still report the reparse-point error; the install works anyway. If `uv python install` complains about a "minor version link", ignore it, the interpreter is installed (creating that link needs Developer Mode). Confirm with `murmur --doctor`, which prints the Python it is on. Installs from 0.13.0 onward do this by themselves.
 - **Hotkey suddenly does nothing (any platform)**: check the menu bar or tray menu for **Pause dictation**. Paused, Murmur ignores the hotkeys and the idle mic dims until you toggle it back.
 - **Hotkey does nothing (macOS)**: Input Monitoring permission is missing, or it was granted while Murmur was already running. The hotkey only attaches at launch, so the fix is always the same: grant it to your terminal (`murmur --doctor` and the settings page both confirm which state you are in), then quit Murmur and open it again. Granted it and it still does nothing? Restart the computer once; that clears every cached permission state.
 - **Nothing pastes (macOS)**: same story with the Accessibility permission.
 - **The hotkey or pasting stops after an update (macOS)**: macOS ties Input Monitoring and Accessibility to the exact program, and reinstalling (which is what `murmur --update` does) can reset them. Re-grant in System Settings > Privacy & Security; `murmur --doctor` shows what is missing.
-- **A key you rebound to does nothing (macOS)**: some top-row F-keys are media keys (volume, brightness) that Murmur cannot see. Hold Fn while pressing it, enable "Use F1, F2, etc. keys as standard function keys" in System Settings, or pick a bare modifier like `cmd_r`.
+- **A key you rebound to does nothing (macOS)**: some top-row F-keys are media keys (volume, brightness) that Murmur cannot see. Hold Fn while pressing it, enable "Use F1, F2, etc. keys as standard function keys" in System Settings, or pick a bare modifier like `alt_r` (Right Option).
 - **An app rejects the paste** (some terminals, password fields): set `"paste": false` to type the text instead.
 - **Clipboard contents vanished**: Murmur restores text clipboards after pasting, but images and files are lost. Set `restore_clipboard_ms` to `-1` if you would rather keep the transcript on the clipboard.
 - **It does not start at login (Windows)**: run `murmur --enable-autostart` and confirm it prints "Murmur will start at login." Startup is per-machine, so enabling it on your Mac never sets up Windows. Murmur should then appear under Task Manager > Startup Apps; if that list shows it as *Disabled*, right-click and choose Enable, since Windows keeps its own on/off flag that can override the entry. If the command reports it cannot find `murmur` on PATH, run `uv tool update-shell`, open a fresh terminal, and try again. After a `uv tool` reinstall or upgrade that moves the command, run the enable line once more to refresh the path it points at.

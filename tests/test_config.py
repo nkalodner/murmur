@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from murmur.config import Config, hotkey_specs, load, save, validate
+from murmur.config import Config, default_hotkey, hotkey_specs, load, save, validate
 from murmur.hotkey import display_binding, display_key, split_binding
 
 
@@ -11,7 +11,14 @@ def test_load_creates_default_file(tmp_path):
     path = tmp_path / "config.json"
     cfg = load(path)
     assert path.exists()
-    assert cfg.hotkey == "ctrl_r" and cfg.model.startswith("nemo-parakeet")
+    assert cfg.hotkey == default_hotkey() and cfg.model.startswith("nemo-parakeet")
+
+
+def test_default_hotkey_is_right_command_on_mac():
+    # Mac keyboards have no Right Ctrl, so a fresh Mac install starts on Right Command.
+    assert default_hotkey("darwin") == "cmd_r"
+    assert default_hotkey("win32") == "ctrl_r"
+    assert default_hotkey("linux") == "ctrl_r"
 
 
 def test_save_load_round_trip(tmp_path):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
@@ -16,11 +17,21 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 HISTORY_PATH = CONFIG_DIR / "history.jsonl"
 
 
+def default_hotkey(platform: str = sys.platform) -> str:
+    """The push-to-talk key a fresh install starts with.
+
+    Mac keyboards, every MacBook included, have no Right Ctrl, so a Mac
+    starts on Right Command instead. Only a first run uses this: load()
+    writes the whole config then, so an existing install keeps its key.
+    """
+    return "cmd_r" if platform == "darwin" else "ctrl_r"
+
+
 @dataclass
 class Config:
     # Two independent bindings, either of which can be turned off (null or
     # blank) as long as one survives. Either may be a chord ("cmd+shift").
-    hotkey: str | None = "ctrl_r"  # hold to talk; a quick tap locks hands-free
+    hotkey: str | None = field(default_factory=default_hotkey)  # hold to talk; a quick tap locks hands-free
     hotkey2: str | None = None
     model: str = "nemo-parakeet-tdt-0.6b-v2"  # v3 is the multilingual variant
     quantization: str | None = "int8"  # null = full precision (bigger download, slower on CPU)
