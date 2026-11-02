@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "murmur-dictation"
-version = "0.15.4"
+version = "0.15.5"
 description = "Local push-to-talk dictation for Windows and macOS. Hold a key, talk, release; the words land at your cursor. Runs NVIDIA Parakeet, Whisper, or Canary on your machine."
 readme = "README.md"
-requires-python = ">=3.10,<3.14"
+requires-python = ">=3.11,<3.14"
 # Exact direct pins keep archive installs reproducible. Dependabot owns
 # upgrades; uv.lock pins the complete transitive graph used by CI.
 dependencies = [
@@ -16,7 +16,7 @@ dependencies = [
     "soxr==1.1.0",
     "pynput==1.8.2",
     "pystray==0.19.5",
-    "pillow==12.3.0",
+    "pillow==13.0.0",
     "pyperclip==1.11.0",
 ]
 
@@ -36,7 +36,7 @@ packages = ["src/murmur"]
 # Test-only. The suite covers the pure logic (formatting, dictionary, chunking,
 # config, sounds) and the recording pill without pulling the heavy audio/ML
 # stack, so `numpy` + `pillow` + `pynput` + `pytest` is enough to run it.
-dev = ["pytest>=8", "numpy", "pillow>=10", "pynput>=1.8"]
+dev = ["pytest>=9.2.0", "numpy", "pillow>=10", "pynput>=1.8"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

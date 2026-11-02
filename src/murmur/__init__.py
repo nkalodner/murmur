@@ -1,3 +1,3 @@
 """Murmur: local push-to-talk dictation."""
 
-__version__ = "0.15.4"
+__version__ = "0.15.5"
