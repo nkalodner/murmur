@@ -6,8 +6,9 @@ toggle login, quit."""
 from __future__ import annotations
 
 import logging
-import time
 import sys
+import threading
+import time
 from typing import Callable
 
 log = logging.getLogger("murmur")
@@ -243,8 +244,6 @@ class Tray:
         # appearance at sunset). A slow poll keeps the ink matched; only a
         # real flip re-renders. Off the recording path entirely.
         if sys.platform in ("darwin", "win32"):
-            import threading
-
             self._theme_stop = threading.Event()
 
             def watch_theme():
@@ -320,14 +319,38 @@ class Tray:
         except Exception as e:  # noqa: BLE001 - no notifications here; the log has it
             log.debug("notify unavailable: %s", e)
 
+    def _on_main(self, fn: Callable[[], None]) -> None:
+        """Run fn where the menu bar allows it.
+
+        AppKit is main-thread only, and recent macOS enforces it: touching the
+        menu-bar item from any other thread (the model loader, the hotkey
+        listener, the settings server) kills Murmur with SIGTRAP. pystray does
+        not switch threads itself, so on a Mac the call is queued on the main
+        run loop instead. Errors are swallowed either way, since one escaping
+        into that run loop would take the app down too.
+        """
+
+        def call():
+            try:
+                fn()
+            except Exception as e:
+                log.debug("tray update failed: %s", e)
+
+        if sys.platform == "darwin" and threading.current_thread() is not threading.main_thread():
+            from PyObjCTools.AppHelper import callAfter
+
+            callAfter(call)
+        else:
+            call()
+
     def set_state(self, state: str) -> None:
         self._state = state
-        try:
-            self._icon.icon = icon_for(state, self._theme)
-            self._icon.title = f"Murmur: {LABELS.get(state, state)}"
-            self._icon.update_menu()
-        except Exception as e:
-            log.debug("tray update failed: %s", e)
+        self._on_main(self._redraw)
+
+    def _redraw(self) -> None:
+        self._icon.icon = icon_for(self._state, self._theme)
+        self._icon.title = f"Murmur: {LABELS.get(self._state, self._state)}"
+        self._icon.update_menu()
 
     def run(self, on_ready: Callable[[], None]) -> None:
         """Blocks the calling thread until Quit. macOS requires this on the main thread."""
@@ -344,7 +367,8 @@ class Tray:
                 log.debug("could not hide the Dock icon: %s", e)
 
         def setup(icon):
-            icon.visible = True
+            # pystray calls this on a thread of its own.
+            self._on_main(lambda: setattr(icon, "visible", True))
             on_ready()
 
         self._icon.run(setup=setup)
@@ -352,7 +376,4 @@ class Tray:
     def stop(self) -> None:
         if self._theme_stop is not None:
             self._theme_stop.set()
-        try:
-            self._icon.stop()
-        except Exception:
-            pass
+        self._on_main(self._icon.stop)

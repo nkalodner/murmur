@@ -158,6 +158,9 @@ class _FakeIcon:
     def update_menu(self):
         self.updates += 1
 
+    def stop(self):
+        self.stopped = True
+
 
 def _fake_pystray(monkeypatch):
     import sys, types
@@ -346,6 +349,36 @@ def test_tray_action_errors_never_escape(monkeypatch):
     paste = next(i for i in items if _label(i) == "Paste last transcript")
     paste.action(tray._icon, paste)  # must swallow, menu still refreshed
     assert tray._icon.updates == 1
+
+
+def test_mac_menu_bar_is_only_touched_on_the_main_thread(monkeypatch):
+    # macOS kills the app (SIGTRAP) when the menu-bar item changes off the
+    # main thread, which is what the model finishing its load on the worker
+    # thread used to do. Off-main changes have to wait for the main run loop.
+    import sys, threading, types
+
+    import murmur.tray as tray_mod
+
+    _fake_pystray(monkeypatch)
+    queued = []
+    helper = types.ModuleType("PyObjCTools.AppHelper")
+    helper.callAfter = queued.append
+    monkeypatch.setitem(sys.modules, "PyObjCTools.AppHelper", helper)
+    tray = Tray("hint", on_quit=lambda: None)
+    monkeypatch.setattr(tray_mod.sys, "platform", "darwin")
+
+    worker = threading.Thread(target=lambda: (tray.set_state("idle"), tray.stop()))
+    worker.start()
+    worker.join()
+    assert tray._icon.updates == 0 and len(queued) == 2  # nothing touched yet
+
+    for call in queued:  # what the main run loop does with them
+        call()
+    assert tray._icon.updates == 1 and tray._icon.title == "Murmur: idle"
+    assert tray._icon.stopped
+
+    tray.set_state("recording")  # already on the main thread: runs directly
+    assert tray._icon.updates == 2 and len(queued) == 2
 
 
 # ---- bar theme -------------------------------------------------------------
