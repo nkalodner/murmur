@@ -29,7 +29,7 @@ curl -LsSf https://raw.githubusercontent.com/nkalodner/murmur/main/install.sh | 
 On Windows (PowerShell):
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/nkalodner/murmur/main/install.ps1 | iex"
+powershell -NoProfile -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/nkalodner/murmur/main/install.ps1 | iex"
 ```
 
 Then open a **new** terminal window and run `murmur`. The settings page opens
@@ -49,7 +49,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 Or on Windows (PowerShell):
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+powershell -NoProfile -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
 **2. Open a new terminal window.** Close the one you just used and open a new one, since only a new window can find uv. Type the next step there.
