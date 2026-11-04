@@ -1187,7 +1187,9 @@ function waitForRestart() {
       wentDown = true;
     }
     if (ticks > 150) {  // about five minutes
-      $("updatingNote").textContent = "This is taking longer than expected. If Murmur has not come back, start it with: murmur";
+      $("updatingNote").textContent = "This is taking longer than expected, so the update probably did not finish. " +
+        "On a Mac, ~/.murmur/update.log says why; on Windows, the update window does. " +
+        "Running the install line from noahkalodner.com/murmur usually fixes it. Then start Murmur with: murmur";
       return;
     }
     setTimeout(tick, 2000);

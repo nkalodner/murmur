@@ -52,6 +52,18 @@ command -v uv >/dev/null 2>&1 \
 
 PYTHON_VERSION="3.12"
 
+# A copy that is still running keeps the old version in memory, and the next
+# `murmur` would only say it is already running. Close it first, the way
+# `murmur --update` does. A running Murmur is the tool's own Python, so match
+# that as the command itself and never an editor or a log tail that only
+# mentions the folder.
+RUNNING="^[^ ]*/uv/tools/murmur-dictation/bin/python"
+if pgrep -f "$RUNNING" >/dev/null 2>&1; then
+  say "Closing the Murmur that is running, so the new one can take its place..."
+  pkill -f "$RUNNING" 2>/dev/null || true
+  sleep 1
+fi
+
 say ""
 say "Installing Murmur (this pulls a Python and builds it; give it a minute)..."
 # Pin a uv-managed Python rather than reusing whatever is on the machine, so a
@@ -79,13 +91,15 @@ else
   say "Start it by opening a NEW terminal window and running:  murmur"
 fi
 say ""
+KEY="Right Ctrl"
 if [ "$(uname -s)" = "Darwin" ]; then
+  KEY="Right Command"  # Mac keyboards have no Right Ctrl (0.15.4)
   say "The first launch asks for three macOS permissions, all granted to your"
   say "terminal app, since that is what runs Murmur: Microphone, Input"
   say "Monitoring (for the hotkey), and Accessibility (for pasting). Grant all"
   say "three, then restart your computer once and the hotkey just works."
   say ""
 fi
-say "The model downloads once on first use (about 700 MB). Hold Right Ctrl,"
+say "The model downloads once on first use (about 700 MB). Hold $KEY,"
 say "talk, let go. Settings open on the first run; 'murmur --settings' after."
 say "Murmur opens at login from now on; the App tab has the switch."

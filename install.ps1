@@ -55,6 +55,17 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
+# A copy that is still running holds its own files open, and uv cannot replace
+# them ("Access is denied"). Close it first, the way `murmur --update` does.
+# Every Murmur process runs from the tool's folder.
+$Running = Get-Process murmur*,python*,pythonw* -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -like "*uv\tools\murmur-dictation*" }
+if ($Running) {
+    Write-Host "Closing the Murmur that is running, so the new one can take its place..."
+    $Running | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+}
+
 Write-Host ""
 Write-Host "Installing Murmur (this pulls a Python and builds it; give it a minute)..."
 # Pin a uv-managed Python rather than letting uv reuse whatever is on the box.

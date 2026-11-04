@@ -54,10 +54,11 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 **2. Open a new terminal window.** Close the one you just used and open a new one, since only a new window can find uv. Type the next step there.
 
-**3. Install Murmur and run it** (either platform). Use the numbered release archive so reinstalling this version always fetches the same source:
+**3. Install Murmur and run it** (either platform). The first line sets up the Python Murmur runs on, the same one the install line uses. The second installs the numbered release archive, so reinstalling this version always fetches the same source:
 
 ```bash
-uv tool install https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.7.zip
+uv python install 3.12
+uv tool install --python 3.12 https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.7.zip
 murmur
 ```
 
@@ -124,6 +125,8 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 ### 0.15.7
 
 - **Updates can no longer get stuck on "restarting".** An update used to reinstall Murmur on whatever Python the old copy ran on, so a copy installed on Python 3.10 could never move past 0.15.4: the new version refused to install, Murmur never came back, and the settings page waited forever. Updates now set up the same Python the install line uses and move Murmur onto it. If you are on 0.15.4 or older and hit this, see [Troubleshooting](#troubleshooting).
+- **The install line closes a running Murmur first.** Before, running it while Murmur was open left the old version running on a Mac, and failed with "Access is denied" on Windows.
+- **Clearer install steps.** On a Mac the install line now names Right Command, the key a Mac actually starts on. The step-by-step and repair commands set up the same Python as everything else.
 
 ### 0.15.6
 
@@ -422,9 +425,9 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 
 - **`uv tool install` fails with "Permission denied" on `~/.cache`** (macOS/Linux): the cache directory is owned by root, usually left behind by an earlier `sudo`. Take it back with `sudo chown -R "$(whoami)" ~/.cache` (and `~/.local` if that one complains too), then reinstall.
 - **`murmur --update` is not a recognized argument**: that command arrived in 0.12.0, so a copy older than that has no `--update` to run. Run the [install](#install) line again. It installs over the old copy and keeps your settings and saved words.
-- **An update sits on "restarting" and Murmur never comes back** (or stops with "does not satisfy Python>=3.11"): that copy runs on Python 3.10, and since 0.15.5 Murmur needs 3.11 or newer. Updates from 0.15.4 or older keep the Python they have, so the new version refuses to install. Nothing is damaged. If Murmur is still running, quit it from its menu-bar or tray icon. Then run the [install](#install) line, which sets up its own Python and installs over the old copy, and start Murmur again. `~/.murmur/update.log` shows the exact error on a Mac.
+- **An update sits on "restarting" and Murmur never comes back** (or stops with "does not satisfy Python>=3.11"): that copy runs on Python 3.10, and since 0.15.5 Murmur needs 3.11 or newer. Updates from 0.15.4 or older keep the Python they have, so the new version refuses to install. Nothing is damaged. Run the [install](#install) line, which closes the old copy, sets up its own Python and installs over it, then start Murmur again. `~/.murmur/update.log` shows the exact error on a Mac.
 - **A reinstall fails with "Invalid environment ... missing Python executable", or "Access is denied" on Windows**: uv cannot repair the tool's environment in place, either because it was left half-written (the managed Python it used moved) or because Murmur is still running and Windows has its files locked. On versions before 0.13.0, `murmur --update` caused this by itself on Windows, whether or not anything was running; the recovery below is the same either way. Quit Murmur completely first: right-click the tray or menu-bar icon and choose Quit (if it starts at login it may be running on its own). Then remove it and install fresh:
-  - Any platform: `uv tool uninstall murmur-dictation`, then `uv tool install https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.7.zip`.
+  - Any platform: `uv tool uninstall murmur-dictation`, then `uv python install 3.12`, then `uv tool install --python 3.12 https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.7.zip`.
   - Windows, if the uninstall still reports "Access is denied": a copy is still holding the files. Stop it and clear the folder in PowerShell, then install again:
     ```powershell
     Get-Process murmur*,python*,pythonw* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*uv\tools\murmur-dictation*" } | Stop-Process -Force
