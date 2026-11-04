@@ -289,38 +289,39 @@ def test_the_two_version_strings_agree():
     assert declared == updates.__version__
 
 
-def test_the_update_stays_on_the_interpreter_already_in_use():
-    # Left to itself uv re-picks a default, and on Windows that can be the
-    # Microsoft Store python, whose environments carry reparse points uv
-    # cannot delete: the next update then dies with os error 4395.
-    import sys
-
-    args = updates._same_python()
-    assert args[0] == "--python"
-    assert args[1] == sys.base_prefix or args[1].startswith(sys.base_prefix)
-
-
-def test_both_reinstall_paths_pass_the_interpreter(monkeypatch, tmp_path):
+def test_updates_land_on_the_python_the_installers_use(monkeypatch, tmp_path):
+    # Reusing the old copy's interpreter stranded every install made on
+    # Python 3.10 once 0.15.5 needed 3.11: uv refused, and the settings page
+    # sat on "restarting" for good. Every path now installs uv's own Python
+    # first, the same one both installers pin, and reinstalls onto it.
     import subprocess
+    from pathlib import Path
+
+    here = Path(updates.__file__).resolve()
+    root = next(p for p in here.parents if (p / "pyproject.toml").exists())
+    py = updates.INSTALL_PYTHON
+    assert f'PYTHON_VERSION="{py}"' in (root / "install.sh").read_text(encoding="utf-8")
+    assert f'$PythonVersion = "{py}"' in (root / "install.ps1").read_text(encoding="utf-8")
 
     monkeypatch.setattr(updates, "CACHE_PATH", tmp_path / "update.json")
-
-    seen = {}
+    ran = []
 
     class Done:
         returncode = 0
 
-    monkeypatch.setattr("subprocess.run", lambda cmd, *a, **k: (seen.update(cmd=cmd), Done())[1])
+    monkeypatch.setattr(subprocess, "run", lambda cmd, *a, **k: ran.append(cmd) or Done())
     updates._reinstall_here("uv", updates.INSTALL_URL)
-    assert "--python" in seen["cmd"]
-    assert seen["cmd"][-1] == updates.INSTALL_URL
+    assert ran[0] == ["uv", "python", "install", py]
+    assert ran[1][-3:] == ["--python", py, updates.INSTALL_URL]
 
-    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(ps=cmd) or object())
-    updates._reinstall_detached("uv", updates.INSTALL_URL)
-    script = seen["ps"][-1]
-    # The flag itself must not be quoted as though it were a path.
-    assert " --python '" in script or " --python " in script
-    assert "'--python'" not in script
+    seen = {}
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(cmd=cmd) or object())
+    for platform in ("darwin", "win32"):
+        monkeypatch.setattr(updates.sys, "platform", platform)
+        updates._reinstall_detached("uv", updates.INSTALL_URL)
+        script = seen["cmd"][-1]
+        assert script.index("python install") < script.index("tool install")
+        assert py in script.split("tool install", 1)[1]
 
 
 def test_update_closes_the_running_copy_instead_of_refusing(monkeypatch, capsys):

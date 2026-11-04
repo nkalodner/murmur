@@ -266,23 +266,17 @@ def self_update(source: str | None = None) -> int:
     return _reinstall_here(uv, source, restart=was_running)
 
 
-def _same_python() -> list[str]:
-    """`--python` args pinning the update to the interpreter already in use.
-
-    Left to itself uv re-picks a default interpreter, and on Windows that
-    is often the Microsoft Store python. Its environments carry reparse
-    points uv cannot delete, so the NEXT update dies with os error 4395
-    ("the object manager encountered a reparse point") and the launcher
-    stops resolving its script path. Staying on the interpreter that is
-    demonstrably working avoids inheriting that.
-    """
-    from pathlib import Path
-
-    base = Path(sys.base_prefix)
-    exe = base / ("python.exe" if sys.platform == "win32" else "bin/python3")
-    if exe.exists():
-        return ["--python", str(exe)]
-    return ["--python", f"{sys.version_info.major}.{sys.version_info.minor}"]
+# Every reinstall lands on uv's own copy of this Python, the one install.sh
+# and install.ps1 pin (a test keeps the three in step). Updates used to reuse
+# whatever interpreter the old copy ran on, which stranded every install made
+# on Python 3.10 once 0.15.5 needed 3.11: uv refused, Murmur never came back,
+# and the settings page sat on "restarting". Each path runs `uv python
+# install` first, so uv picks its managed copy over anything else on the
+# machine. On Windows that also keeps it off the Microsoft Store python, whose
+# environments carry reparse points uv cannot delete (os error 4395 on the
+# next update). The install's own exit status is ignored, as in the
+# installers: it can fail on its last symlink after placing a working Python.
+INSTALL_PYTHON = "3.12"
 
 
 def _reinstall_here(uv: str, source: str, restart: bool = False) -> int:
@@ -290,8 +284,9 @@ def _reinstall_here(uv: str, source: str, restart: bool = False) -> int:
     import subprocess
 
     try:
+        subprocess.run([uv, "python", "install", INSTALL_PYTHON])
         done = subprocess.run(
-            [uv, "tool", "install", "--force", "--reinstall", *_same_python(), source]
+            [uv, "tool", "install", "--force", "--reinstall", "--python", INSTALL_PYTHON, source]
         )
     except Exception as e:  # noqa: BLE001 - any failure here is the same message
         print(f"Could not run uv: {e}")
@@ -340,8 +335,8 @@ def spawn_detached_update(uv: str, source: str, restart: bool) -> None:
     The current process holds files uv has to replace (Windows refuses to
     delete a running executable; POSIX is happier, but an in-app update is
     replacing the very app that asked for it), so the swap must happen
-    after this PID has exited. The helper waits for that, runs uv pinned to
-    the interpreter already in use, and puts Murmur back if asked to.
+    after this PID has exited. The helper waits for that, runs uv on
+    INSTALL_PYTHON, and puts Murmur back if asked to.
 
     Windows gets a PowerShell in its own window so the output is visible.
     POSIX gets sh with output appended to ~/.murmur/update.log.
@@ -360,12 +355,8 @@ def spawn_detached_update(uv: str, source: str, restart: bool) -> None:
                 # The uv trampoline that launched us outlives the python it ran
                 # by a beat, and uv is about to overwrite that very file.
                 "Start-Sleep -Milliseconds 500",
-                " ".join(
-                    [f"& {q(uv)} tool install --force --reinstall"]
-                    # The flag is a literal; only its value needs quoting.
-                    + [a if a.startswith("--") else q(a) for a in _same_python()]
-                    + [q(source)]
-                ),
+                f"& {q(uv)} python install {q(INSTALL_PYTHON)}",
+                f"& {q(uv)} tool install --force --reinstall --python {q(INSTALL_PYTHON)} {q(source)}",
                 "$code = $LASTEXITCODE",
                 # Put Murmur back only if it was up before, and only on a good
                 # swap: relaunching a half-replaced install helps nobody.
@@ -402,11 +393,9 @@ def spawn_detached_update(uv: str, source: str, restart: bool) -> None:
     parts = [
         f"while kill -0 {os.getpid()} 2>/dev/null; do sleep 0.5; done",
         "sleep 0.5",
-        " ".join(
-            [shlex.quote(uv), "tool", "install", "--force", "--reinstall"]
-            + [shlex.quote(a) for a in _same_python()]
-            + [shlex.quote(source)]
-        ),
+        f"{shlex.quote(uv)} python install {INSTALL_PYTHON}",
+        f"{shlex.quote(uv)} tool install --force --reinstall --python {INSTALL_PYTHON} "
+        f"{shlex.quote(source)}",
     ]
     script = "; ".join(parts)
     if launcher:
@@ -441,7 +430,10 @@ def _reinstall_detached(uv: str, source: str, restart: bool = False) -> int:
         spawn_detached_update(uv, source, restart)
     except Exception as e:  # noqa: BLE001 - the advice is the same whatever failed
         print(f"Could not start the updater: {e}")
-        print(f"Run this yourself instead:  uv tool install --force --reinstall {source}")
+        print(
+            "Run this yourself instead:  "
+            f"uv tool install --force --reinstall --python {INSTALL_PYTHON} {source}"
+        )
         return 1
 
     CACHE_PATH.unlink(missing_ok=True)  # the banner is about a version we are leaving
