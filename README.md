@@ -469,7 +469,7 @@ uv run pytest                # run the test suite
 The tests cover the pure logic (spoken-form formatting, the dictionary,
 audio chunking, config, sound cues) and the recording pill, and skip the
 display-dependent hotkey checks when there is no X server. They also run in
-CI on every change under `murmur/`.
+CI.
 
 ## Credits
 
