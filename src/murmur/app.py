@@ -963,7 +963,7 @@ class App:
                 self.listener.stop()
         except Exception:
             pass
-        self.recorder.abort()
+        self.recorder.close()  # no lingering: the microphone goes now
         self._jobs.put(None)
         self._events.put((None, 0.0, None))
         if self.ducker:

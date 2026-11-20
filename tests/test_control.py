@@ -38,6 +38,9 @@ class FakeRecorder:
     def abort(self):
         self.stops += 1
 
+    def close(self):
+        self.stops += 1
+
     def mute_for(self, seconds):
         pass
 
