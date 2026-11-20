@@ -132,6 +132,7 @@ class Tray:
         on_toggle_autostart: Callable[[], None] | None = None,
         update_available: Callable[[], bool] | None = None,
         on_update: Callable[[], None] | None = None,
+        version: str | None = None,
     ):
         import pystray
 
@@ -224,6 +225,13 @@ class Tray:
             )
         if toggles:
             items += [pystray.Menu.SEPARATOR, *toggles]
+        if version:
+            # Which Murmur this is, without opening Settings. It sits right
+            # above the update row, which is the question it answers.
+            items += [
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem(f"Version {version}", None, enabled=False),
+            ]
         if update_available is not None and (on_update is not None or on_settings is not None):
             has_update = self._fresh(update_available)
             if on_update is not None:

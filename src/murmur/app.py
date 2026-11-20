@@ -777,7 +777,14 @@ class App:
             log.error("%s", e)
             self.open_settings()
             return
-        log.info("Updating. Murmur closes and comes back by itself.")
+        message = (
+            f"Updating to Murmur {info['latest']}. It closes now and reopens "
+            "by itself in a minute or so."
+        )
+        log.info("%s", message)
+        if self.tray:
+            # Before the shutdown, or there is no icon left to say it.
+            self.tray.notify(message)
         self.shutdown()
 
     def paste_last_transcript(self) -> None:
@@ -875,6 +882,19 @@ class App:
 
             updates.check_in_background()
 
+        # If this start is the far end of an update, say how it went: the
+        # copy that asked for it is gone, and an icon that blinked out and
+        # back is not a confirmation.
+        updated = None
+        try:
+            from murmur import updates as _updates
+
+            updated = _updates.update_outcome()
+        except Exception as e:  # noqa: BLE001 - a nicety must never stop a start
+            log.debug("update note unreadable: %s", e)
+        if updated:
+            log.info("%s", updated)
+
         if use_tray:
             try:
                 from murmur import autostart, updates
@@ -896,6 +916,7 @@ class App:
                     ),
                     update_available=lambda: bool(updates.status().get("available")),
                     on_update=self.update_from_tray,
+                    version=__version__,
                 )
             except Exception as e:
                 log.warning("Tray unavailable (%s); running without it. Ctrl+C quits.", e)
@@ -905,7 +926,9 @@ class App:
             with self._lock:
                 self._set_state(self._state)  # sync the initial icon
             try:
-                self.tray.run(on_ready=lambda: None)  # blocks the main thread until Quit
+                tray = self.tray
+                # Blocks the main thread until Quit.
+                tray.run(on_ready=(lambda: tray.notify(updated)) if updated else (lambda: None))
                 ran_tray = True
             except Exception as e:
                 log.warning("Tray failed (%s); running without it. Ctrl+C quits.", e)

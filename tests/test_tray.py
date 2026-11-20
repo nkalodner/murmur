@@ -549,3 +549,14 @@ def test_quit_elsewhere_still_stops_the_icon_in_place(monkeypatch):
     quit_item = next(i for i in tray._icon.menu.items if i != "---" and _label(i) == "Quit Murmur")
     quit_item.action(tray._icon, quit_item)
     assert quits == [1] and tray._icon.stopped
+
+
+def test_the_menu_says_which_version_this_is(monkeypatch):
+    _fake_pystray(monkeypatch)
+    tray = Tray("hint", on_quit=lambda: None, version="0.15.9",
+                update_available=lambda: False, on_update=lambda: None)
+    labels = [_label(i) for i in tray._icon.menu.items if i != "---"]
+    assert "Version 0.15.9" in labels
+    assert labels.index("Version 0.15.9") == labels.index("Check for updates") - 1
+    row = next(i for i in tray._icon.menu.items if i != "---" and _label(i) == "Version 0.15.9")
+    assert row.enabled is False  # a label, not a button

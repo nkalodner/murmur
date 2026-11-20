@@ -198,6 +198,51 @@ def stop_running_instance(timeout: float = 15.0) -> bool:
     return False
 
 
+def _marker():
+    return CONFIG_DIR / "updating.json"
+
+
+def mark_update_started() -> None:
+    """Leave a note for the next copy to start: an update began from here.
+
+    The copy that asks for an update is gone before it finishes, and the one
+    that comes back has no idea it is the result of one. Without this the
+    only sign of an update was the icon blinking out and back.
+    """
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        _marker().write_text(json.dumps({"from": __version__}) + "\n", encoding="utf-8")
+    except OSError as e:
+        log.debug("could not note the update: %s", e)
+
+
+def update_outcome() -> str | None:
+    """What to tell the user at startup about the update that led here.
+
+    None when no update was in flight. Reads the note once and removes it,
+    so the message is shown a single time.
+    """
+    path = _marker()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    finally:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    before = data.get("from") if isinstance(data, dict) else None
+    if not isinstance(before, str) or not before:
+        return None
+    if before != __version__:
+        return f"Murmur is updated: now {__version__} (was {before})."
+    return (
+        f"The update did not finish, so Murmur is still on {__version__}. "
+        "The settings page has the way to fix it."
+    )
+
+
 def _updated_line(restarted: bool) -> str:
     return (
         "Updated, and Murmur is running again."
@@ -301,6 +346,7 @@ def _reinstall_here(uv: str, source: str, restart: bool = False) -> int:
     launcher = _launcher() if restart else None
     if launcher:
         try:
+            mark_update_started()
             # start_new_session already detaches it; --foreground stops it
             # bouncing through the handoff a second time on the way up.
             subprocess.Popen([launcher, "--foreground"], start_new_session=True)
@@ -344,6 +390,7 @@ def spawn_detached_update(uv: str, source: str, restart: bool) -> None:
     import os
     import subprocess
 
+    mark_update_started()
     launcher = _launcher() if restart else None
     if sys.platform == "win32":
         def q(value: str) -> str:  # a PowerShell single-quoted literal

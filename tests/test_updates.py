@@ -386,3 +386,31 @@ def test_stop_returns_true_when_nothing_is_running(monkeypatch):
     monkeypatch.setattr("murmur.server.find_running_instance", lambda *a, **k: None)
     _stub_lock(monkeypatch, acquired=True)  # not the real one: Murmur may be up
     assert updates.stop_running_instance(timeout=2.0) is True
+
+
+# ---- saying how an update went ---------------------------------------------
+
+
+def test_no_update_in_flight_means_nothing_to_say():
+    assert updates.update_outcome() is None
+
+
+def test_the_copy_that_comes_back_says_it_is_updated(monkeypatch):
+    monkeypatch.setattr(updates, "__version__", "0.15.8")
+    updates.mark_update_started()
+    monkeypatch.setattr(updates, "__version__", "0.15.9")  # the new copy starts
+    assert updates.update_outcome() == "Murmur is updated: now 0.15.9 (was 0.15.8)."
+    assert updates.update_outcome() is None  # said once, not at every start
+
+
+def test_an_update_that_changed_nothing_is_reported_as_unfinished():
+    updates.mark_update_started()
+    message = updates.update_outcome()  # same version came back
+    assert "did not finish" in message and updates.__version__ in message
+
+
+def test_a_garbled_note_is_dropped_quietly(murmur_home):
+    murmur_home.mkdir(parents=True, exist_ok=True)
+    (murmur_home / "updating.json").write_text("not json", encoding="utf-8")
+    assert updates.update_outcome() is None
+    assert not (murmur_home / "updating.json").exists()
