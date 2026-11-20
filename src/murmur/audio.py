@@ -29,14 +29,7 @@ def _sd():
 # their own, and a restart would cut one off mid-note.
 RESCAN = sys.platform == "darwin"
 RESCAN_AGE = 20.0  # seconds a list may sit before a finished take refreshes it
-CLOSE_WAIT = 1.0  # how long a new take waits on the last stream closing
-# How long the microphone stays open after a take, in case another follows.
-# Opening and closing a CoreAudio device is the slow, fragile part of a take;
-# doing it several times a second (the hotkey tapped on and off) is how the
-# device ends up refusing to open at all. A take that starts inside this
-# window reuses the open stream instead, which is also instant. The price is
-# the mic indicator staying lit this much longer after you stop.
-LINGER = 2.0
+CLOSE_WAIT = 1.0  # how long a new take waits on the last one's stream closing
 
 # One lock for everything that opens, closes or restarts PortAudio. Nothing
 # on the menu-bar thread may ever wait on it: the device list those callers
@@ -204,18 +197,13 @@ class Recorder:
         self._sr = TARGET_SR
         self._level = 0.0  # smoothed input level, 0..1, for the recording pill
         self._mute_samples = 0  # head-of-take samples to silence (the start chime)
-        self._take = 0  # counts takes
-        self._stream_take = 0  # the take the open stream was opened for
-        self._capturing = False  # a take is running (the stream may outlive it)
-        self._stream_device: int | None = None  # what the open stream was opened on
-        self._stream_gen = _scan_gen
-        self._linger: threading.Timer | None = None
-        self._closed = threading.Event()  # the previous stream is gone
+        self._take = 0  # which take the live stream belongs to
+        self._closed = threading.Event()  # the previous take's stream is gone
         self._closed.set()
 
     @property
     def active(self) -> bool:
-        return self._capturing
+        return self._stream is not None
 
     def current_level(self) -> float:
         """Latest smoothed mic level (0..1). A plain float read, GIL-safe."""
@@ -239,8 +227,6 @@ class Recorder:
         with self._lock:
             self._device = device
             self._device_gen = _scan_gen
-            # A stream lingering on the old device is not reused (see
-            # _reusable); the next start() closes it and opens the new one.
 
     def _open(self, sd, callback):
         """An unstarted InputStream on the current device."""
@@ -280,59 +266,34 @@ class Recorder:
             raise
         return stream
 
-    def _reusable(self) -> bool:
-        """The stream left open by the last take can serve this one."""
-        stream = self._stream
-        if stream is None:
-            return False
-        if self._stream_gen != _scan_gen or self._stream_device != self._device:
-            return False
-        try:
-            # A device that went away while we lingered stops its stream.
-            return bool(getattr(stream, "active", True))
-        except Exception:
-            return False
-
     def start(self) -> None:
         global _open_streams
         sd = _sd()
         with self._lock:
-            if self._capturing:
-                return
-            if self._linger is not None:
-                self._linger.cancel()
-                self._linger = None
-            if self._resolve is not None and self._device_gen != _scan_gen:
-                self._device = self._resolve()
-                self._device_gen = _scan_gen
-            self._chunks = []
-            self._mute_samples = 0
-            self._take += 1
-            if self._reusable():
-                self._capturing = True
-                return
             if self._stream is not None:
-                # Open, but on the wrong device or no longer running.
-                stale, self._stream = self._stream, None
-                self._closed = _close_async(stale)
-            # Give the last stream a moment to finish closing. If it has
-            # not, open anyway: a close that hangs must cost one stream,
-            # not every take from here on.
+                return
+            # The last take's stream closes in the background. Give it a
+            # moment to finish; if it has not, open anyway. Refusing here
+            # (0.15.8) meant one close that hung cost every take after it.
             if not self._closed.wait(CLOSE_WAIT):
                 log.warning("The last microphone stream is slow to close; opening a new one anyway")
             if not _pa.acquire(timeout=CLOSE_WAIT * 3):
                 raise RuntimeError("the audio system is busy; try again in a moment")
             try:
+                self._chunks = []
+                self._mute_samples = 0
+                self._take += 1
                 take = self._take
-                self._stream_take = take
 
-                def callback(indata, frames, time_info, status, _stream_take=take):
-                    # Only while a take is running, and only from the stream
-                    # that take is using: a lingering stream keeps delivering
-                    # blocks between takes, and a closing one a last few.
-                    if self._capturing and self._stream_take == _stream_take:
+                def callback(indata, frames, time_info, status, _take=take):
+                    # A stream that is on its way out can still deliver a
+                    # block or two; those belong to no take.
+                    if _take == self._take:
                         self._callback(indata, frames, time_info, status)
 
+                if self._resolve is not None and self._device_gen != _scan_gen:
+                    self._device = self._resolve()
+                    self._device_gen = _scan_gen
                 try:
                     stream = self._open_started(sd, callback)
                 except Exception as first:
@@ -348,9 +309,6 @@ class Recorder:
                     stream = self._open_started(sd, callback)
                 _open_streams += 1
                 self._stream = stream
-                self._stream_device = self._device
-                self._stream_gen = _scan_gen
-                self._capturing = True
             finally:
                 _pa.release()
 
@@ -375,19 +333,16 @@ class Recorder:
     def stop(self) -> tuple[np.ndarray, float]:
         """Hand back (mono float32 at 16 kHz, seconds recorded) right away.
 
-        The stream stays open for LINGER seconds in case another take
-        follows, then closes in the background (see _close_async). Either
-        way nothing here waits on the device.
+        The stream itself is closed in the background (see _close_async), so
+        the transcript starts the moment the key comes up.
         """
         with self._lock:
-            self._capturing = False
+            stream, self._stream = self._stream, None
             chunks, self._chunks = self._chunks, []
             sr = self._sr
-            stream = self._stream
-            if stream is not None and self._linger is None:
-                self._linger = threading.Timer(LINGER, self._linger_over, args=(stream,))
-                self._linger.daemon = True
-                self._linger.start()
+            self._take += 1  # anything the old stream still delivers is dropped
+            if stream is not None:
+                self._closed = _close_async(stream)
         self._level = 0.0
         if not chunks:
             return np.zeros(0, dtype=np.float32), 0.0
@@ -401,28 +356,8 @@ class Recorder:
             data = soxr.resample(data, sr, TARGET_SR)
         return np.ascontiguousarray(data, dtype=np.float32), seconds
 
-    def _linger_over(self, stream) -> None:
-        with self._lock:
-            # A take that began in the meantime owns the stream now.
-            if self._stream is not stream or self._capturing:
-                return
-            self._linger = None
-            self._stream = None
-            self._closed = _close_async(stream)
-
     def abort(self) -> None:
         self.stop()
-
-    def close(self) -> None:
-        """Stop and let go of the microphone now, without lingering."""
-        self.stop()
-        with self._lock:
-            if self._linger is not None:
-                self._linger.cancel()
-                self._linger = None
-            stream, self._stream = self._stream, None
-            if stream is not None:
-                self._closed = _close_async(stream)
 
     def wait_closed(self, timeout: float = 3.0) -> bool:
         """Block until the last stream is really closed. For shutdown and tests."""
@@ -434,7 +369,7 @@ def preflight(device: int | None) -> None:
     rec = Recorder(device)
     rec.start()
     time.sleep(0.15)
-    rec.close()
+    rec.abort()
 
 
 def record_sample(device: int | None, seconds: float = 1.4) -> tuple[np.ndarray, float]:
@@ -442,7 +377,4 @@ def record_sample(device: int | None, seconds: float = 1.4) -> tuple[np.ndarray,
     rec = Recorder(device)
     rec.start()
     time.sleep(seconds)
-    try:
-        return rec.stop()
-    finally:
-        rec.close()
+    return rec.stop()

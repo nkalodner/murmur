@@ -124,7 +124,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 
 ### 0.15.10
 
-- **Tapping the hotkey on and off quickly no longer breaks Murmur.** Each recording used to open the microphone and close it again. Done several times a second, the microphone started refusing to open: two error beeps per press, then nothing until Murmur was restarted. Murmur now keeps the microphone open for two seconds after a recording, so a burst of recordings shares one. The next recording in that window also starts instantly. The one visible difference is that the microphone indicator stays lit for two seconds after you stop.
+- **Tapping the hotkey on and off quickly no longer breaks Murmur.** Each recording opens the microphone and closes it again. Done several times a second, the microphone started refusing to open: two error beeps per press, then nothing until Murmur was restarted. After a recording ends, Murmur now ignores the hotkey for three quarters of a second, which gives the microphone time to close before it is opened again.
 - **One stuck recording no longer blocks the ones after it.** If the microphone is slow to close, the next recording opens its own.
 
 ### 0.15.9

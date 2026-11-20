@@ -72,6 +72,7 @@ class App:
         self._state = State.IDLE
         self._paused = False  # tray toggle: hotkeys ignored until unpaused
         self._press_t = 0.0
+        self._ended_t = float("-inf")  # when the last take stopped, for COOLDOWN
         self._take = 0  # counts takes, so a late time-limit event finds no one home
         self._max_timer: threading.Timer | None = None
         self._jobs: SimpleQueue = SimpleQueue()
@@ -192,6 +193,12 @@ class App:
     # took seconds to open). Starting a take now, long after the key went
     # down, would record at a moment nobody chose.
     STALE_PRESS = 1.5
+    # After a take ends, the hotkey is ignored for this long. Each take opens
+    # the microphone and closes it again, and doing that several times a
+    # second (the key tapped on and off) is how the device ends up refusing
+    # to open: an error chime per press, then nothing. Long enough for the
+    # close to finish, short enough not to be felt between real dictations.
+    COOLDOWN = 0.75
 
     def _control_loop(self) -> None:
         while not self._stopping.is_set():
@@ -247,6 +254,9 @@ class App:
                 if time.monotonic() - t > self.STALE_PRESS:
                     log.info("Ignored a hotkey press that waited too long to be handled")
                     return
+                if t - self._ended_t < self.COOLDOWN:
+                    log.debug("Ignored a hotkey press right after the last recording")
+                    return
                 self._press_t = t
                 self._start_recording()
             elif self._state == State.LOCKED:
@@ -272,6 +282,7 @@ class App:
             if self._state in (State.RECORDING, State.LOCKED):
                 self._cancel_max_timer()
                 self.recorder.abort()
+                self._ended_t = time.monotonic()
                 if self.ducker:
                     self.ducker.restore()
                 self._set_state(State.IDLE)
@@ -324,6 +335,7 @@ class App:
     def _finish_recording(self) -> None:
         self._cancel_max_timer()
         wav, seconds = self.recorder.stop()
+        self._ended_t = time.monotonic()
         if self.ducker:
             self.ducker.restore()
         self.sounds.play("stop")
@@ -963,7 +975,7 @@ class App:
                 self.listener.stop()
         except Exception:
             pass
-        self.recorder.close()  # no lingering: the microphone goes now
+        self.recorder.abort()
         self._jobs.put(None)
         self._events.put((None, 0.0, None))
         if self.ducker:
