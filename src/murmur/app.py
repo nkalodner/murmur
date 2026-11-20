@@ -11,7 +11,7 @@ import threading
 import time
 from datetime import datetime, timezone
 from enum import Enum
-from queue import SimpleQueue
+from queue import Empty, SimpleQueue
 
 from murmur import __version__
 from murmur.config import HISTORY_PATH, Config, load
@@ -45,7 +45,11 @@ class App:
 
         self.cfg = cfg
         self._device = find_input_device(cfg.device)
-        self.recorder = Recorder(self._device)
+        # The resolver finds the configured microphone again by name after
+        # the device list is refreshed, since that renumbers everything.
+        self.recorder = Recorder(
+            self._device, resolve=lambda: find_input_device(self.cfg.device)
+        )
         self.transcriber = Transcriber(cfg.model, cfg.quantization, cfg.language)
         # A model swap loads in the background while the current one keeps
         # serving. _pending is what is loading (for the tray and the page),
@@ -68,9 +72,18 @@ class App:
         self._state = State.IDLE
         self._paused = False  # tray toggle: hotkeys ignored until unpaused
         self._press_t = 0.0
+        self._take = 0  # counts takes, so a late time-limit event finds no one home
         self._max_timer: threading.Timer | None = None
         self._jobs: SimpleQueue = SimpleQueue()
         self._stopping = threading.Event()
+        # Hotkey events are handled on a thread of their own. The listener
+        # only drops them here and returns, because opening or closing the
+        # microphone inside the keyboard tap's callback is slow enough that
+        # macOS switches the tap off (see hotkey._listener_class).
+        self._events: SimpleQueue = SimpleQueue()
+        self._control = threading.Thread(
+            target=self._control_loop, name="murmur-control", daemon=True
+        )
         # macOS grants as they stood when the hotkey listener started; the
         # settings page compares against the live status to say "granted,
         # now quit and reopen" at exactly the right moment.
@@ -148,22 +161,100 @@ class App:
             self.ducker = None
 
     # -- hotkey callbacks (run on the listener thread) --------------------
+    # These three only note what happened and when. The work is done by
+    # _control_loop, so the keyboard tap gets its callback back at once.
 
     def on_press(self) -> None:
+        self._post("press")
+
+    def on_release(self) -> None:
+        self._post("release")
+
+    def on_cancel(self) -> None:
+        self._post("cancel")
+
+    def _post(self, kind: str, arg=None) -> None:
+        event = (kind, time.monotonic(), arg)
+        if self._control.is_alive():
+            self._events.put(event)
+        else:
+            # No control thread (not started yet, or it died): handle it
+            # here rather than drop a keypress on the floor.
+            self._handle_event(*event)
+
+    # -- the control thread ------------------------------------------------
+
+    # A press this old was waiting behind something slow (a microphone that
+    # took seconds to open). Starting a take now, long after the key went
+    # down, would record at a moment nobody chose.
+    STALE_PRESS = 1.5
+
+    def _control_loop(self) -> None:
+        while not self._stopping.is_set():
+            try:
+                kind, t, arg = self._events.get(timeout=2.0)
+            except Empty:
+                # Quiet moment: make sure macOS has not switched the hotkey
+                # listener off behind our back.
+                try:
+                    if self.listener is not None:
+                        self.listener.check_tap()
+                except Exception as e:  # noqa: BLE001
+                    log.debug("hotkey check failed: %s", e)
+                continue
+            if kind is None:
+                break
+            self._handle_event(kind, t, arg)
+
+    def _handle_event(self, kind: str, t: float, arg=None) -> None:
+        try:
+            if kind == "press":
+                self._pressed(t)
+            elif kind == "release":
+                self._released(t)
+            elif kind == "cancel":
+                self._canceled()
+            elif kind == "max":
+                self._max_reached(arg)
+        except Exception:
+            log.exception("Handling the hotkey failed")
+            self._recover()
+
+    def _recover(self) -> None:
+        """Something broke mid-take. Whatever it was, do not sit on
+        "recording" forever: let go of the microphone and go back to idle."""
+        with self._lock:
+            self._cancel_max_timer()
+            try:
+                self.recorder.abort()
+            except Exception as e:  # noqa: BLE001
+                log.debug("recorder abort failed: %s", e)
+            if self.ducker:
+                self.ducker.restore()
+            if self._state in (State.RECORDING, State.LOCKED):
+                self._set_state(State.IDLE)
+        self.sounds.play("error")
+
+    def _pressed(self, t: float) -> None:
         with self._lock:
             if self._stopping.is_set() or self._paused:
                 return
             if self._state == State.IDLE:
-                self._press_t = time.monotonic()
+                if time.monotonic() - t > self.STALE_PRESS:
+                    log.info("Ignored a hotkey press that waited too long to be handled")
+                    return
+                self._press_t = t
                 self._start_recording()
             elif self._state == State.LOCKED:
                 self._finish_recording()
             # RECORDING: duplicate event, ignore. BUSY: wait for the paste.
 
-    def on_release(self) -> None:
+    def _released(self, t: float) -> None:
         with self._lock:
             if self._state == State.RECORDING:
-                held_ms = (time.monotonic() - self._press_t) * 1000
+                # Measured between the two keyboard events themselves, so a
+                # slow microphone cannot turn a quick tap into a long hold.
+                held_ms = (t - self._press_t) * 1000
                 if held_ms < self.cfg.tap_lock_ms:
                     self._set_state(State.LOCKED)
                     log.info(
@@ -172,7 +263,7 @@ class App:
                 else:
                     self._finish_recording()
 
-    def on_cancel(self) -> None:
+    def _canceled(self) -> None:
         with self._lock:
             if self._state in (State.RECORDING, State.LOCKED):
                 self._cancel_max_timer()
@@ -206,13 +297,16 @@ class App:
         # After the cue, so the confirmation chime is not the thing we duck.
         if self.ducker:
             self.ducker.duck()
-        self._max_timer = threading.Timer(self.cfg.max_seconds, self._on_max_duration)
+        self._take += 1
+        self._max_timer = threading.Timer(
+            self.cfg.max_seconds, self._post, args=("max", self._take)
+        )
         self._max_timer.daemon = True
         self._max_timer.start()
 
-    def _on_max_duration(self) -> None:
+    def _max_reached(self, take: int) -> None:
         with self._lock:
-            if self._state in (State.RECORDING, State.LOCKED):
+            if take == self._take and self._state in (State.RECORDING, State.LOCKED):
                 log.info(
                     "Hit max_seconds (%ss); transcribing what was recorded", self.cfg.max_seconds
                 )
@@ -311,6 +405,12 @@ class App:
             from murmur.audio import input_devices
 
             devices = input_devices()
+            # Someone has the settings page open, likely looking at this very
+            # list. Refresh it behind them if it has sat a while and no take
+            # is running (the refresh declines by itself otherwise).
+            from murmur.audio import refresh_devices_async
+
+            refresh_devices_async()
         except Exception as e:
             log.debug("device listing failed: %s", e)
         from murmur import autostart, updates
@@ -737,6 +837,7 @@ class App:
             log.warning("Microphone preflight failed (%s). Is a microphone connected?", e)
 
         self._worker.start()
+        self._control.start()
         self.listener = HotkeyListener(
             self.cfg.hotkey,
             self.on_press,
@@ -825,6 +926,7 @@ class App:
             pass
         self.recorder.abort()
         self._jobs.put(None)
+        self._events.put((None, 0.0, None))
         if self.ducker:
             # Blocks until the volume is back: main() may os._exit() right
             # after this, and a daemon thread would not get another turn.
@@ -983,18 +1085,57 @@ def _relaunch_detached(argv: list[str] | None, open_settings: bool = False) -> b
         cmd = [str(gui if gui.exists() else exe), "-m", "murmur", "--foreground", *passthrough]
 
     extra: dict = {}
+    log_file = None
     if sys.platform == "win32":
         extra["creationflags"] = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(
             subprocess, "CREATE_NEW_PROCESS_GROUP", 0
         )
     else:
         extra["start_new_session"] = True
+        # The copy outlives this terminal, so what it logs has to go
+        # somewhere that does too. The same file a start at login writes.
+        try:
+            from murmur.config import CONFIG_DIR
+
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            log_file = open(CONFIG_DIR / "murmur.log", "ab")  # noqa: SIM115
+            extra.update(stdin=subprocess.DEVNULL, stdout=log_file, stderr=log_file)
+        except OSError as e:
+            log.debug("no log file for the background copy: %s", e)
     try:
         subprocess.Popen(cmd, close_fds=True, **extra)
         return True
     except Exception as e:  # noqa: BLE001 - fall back to running here
         log.debug("could not detach (%s); staying in the foreground", e)
         return False
+    finally:
+        if log_file is not None:
+            log_file.close()  # the child has its own copy
+
+
+def _trace_crashes() -> None:
+    """Leave evidence when Murmur dies or hangs.
+
+    A hard crash (macOS stopping the process for touching the menu bar from
+    the wrong thread, a fault inside the audio or speech libraries) used to
+    end with nothing in the log at all. With this, the log gets what every
+    thread was doing at that moment. A copy that is frozen rather than dead
+    can be asked for the same picture: `kill -USR1 <pid>`.
+    """
+    if sys.stderr is None:
+        return
+    try:
+        import faulthandler
+        import signal
+
+        faulthandler.enable(all_threads=True)
+        if sys.platform != "win32":
+            faulthandler.register(signal.SIGUSR1, all_threads=True)
+            # Not one of the faults enable() covers, and the one macOS uses
+            # for main-thread violations. chain=True still ends the process.
+            faulthandler.register(signal.SIGTRAP, all_threads=True, chain=True)
+    except Exception as e:  # noqa: BLE001 - diagnostics must never stop a start
+        log.debug("crash traces unavailable: %s", e)
 
 
 def _n(count: int, noun: str) -> str:
@@ -1260,6 +1401,7 @@ def main(argv: list[str] | None = None) -> int:
             lock.port,
         )
 
+    _trace_crashes()
     try:
         app = App(cfg)
     except LookupError as e:

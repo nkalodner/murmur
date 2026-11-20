@@ -53,13 +53,20 @@ class Transcriber:
             return ""
         kwargs = {"language": self.language} if self.language else {}
         t0 = time.monotonic()
-        try:
-            results = self._model.recognize(chunks, sample_rate=TARGET_SR, **kwargs)
-        except TypeError:
-            # Model does not take a language option; retry plain.
-            results = self._model.recognize(chunks, sample_rate=TARGET_SR)
-        if isinstance(results, str):
-            results = [results]
+        # One piece at a time. Handing a long take over as a single batch
+        # makes the model hold every piece in memory at once and pins the
+        # machine for the whole of it; in turn costs the same total work and
+        # only ever holds one.
+        results: list[str] = []
+        for chunk in chunks:
+            try:
+                out = self._model.recognize([chunk], sample_rate=TARGET_SR, **kwargs)
+            except TypeError:
+                # Model does not take a language option; retry plain, and
+                # stop offering it for the rest of this take.
+                kwargs = {}
+                out = self._model.recognize([chunk], sample_rate=TARGET_SR)
+            results.extend([out] if isinstance(out, str) else out)
         text = " ".join(r.strip() for r in results if r and r.strip())
         log.debug(
             "Transcribed %.1fs of audio in %.2fs (%d chunk(s))",

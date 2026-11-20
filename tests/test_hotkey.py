@@ -232,3 +232,40 @@ def test_retarget_can_switch_the_primary_off():
     assert spy.presses == 0
     ear._handle_press(key("f8"))
     assert spy.presses == 1
+
+
+# ── macOS switching the listener off ────────────────────────────────────
+
+
+def test_a_revived_tap_releases_the_take_it_lost_track_of():
+    # While the tap was off the key-up went unheard. Holding on to "key is
+    # down" would leave the app recording until the time limit.
+    spy = Spy()
+    ear = spy.listener("ctrl_r")
+    ear._handle_press(key("ctrl_r"))
+    assert spy.presses == 1 and ear.hotkey_down
+    ear._tap_restored()
+    assert spy.releases == 1 and not ear.hotkey_down
+    ear._handle_press(key("ctrl_r"))  # and the next press is a fresh one
+    assert spy.presses == 2
+
+
+def test_a_revived_tap_with_no_take_running_fires_nothing():
+    spy = Spy()
+    ear = spy.listener("cmd+shift")
+    ear._handle_press(key("cmd"))  # half a chord held when the tap dropped
+    ear._tap_restored()
+    assert spy.releases == 0 and not ear.hotkey_down
+
+
+def test_check_tap_is_a_no_op_where_there_is_no_tap_to_lose():
+    assert Spy().listener().check_tap() is False
+
+
+def test_check_tap_reports_a_revival_and_stays_quiet_after_stop():
+    spy = Spy()
+    ear = spy.listener()
+    ear._listener.murmur_revive = lambda: True
+    assert ear.check_tap() is True
+    ear._active_listener = False  # shutting down: leave the tap alone
+    assert ear.check_tap() is False

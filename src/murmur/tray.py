@@ -9,6 +9,7 @@ import logging
 import sys
 import threading
 import time
+from queue import SimpleQueue
 from typing import Callable
 
 log = logging.getLogger("murmur")
@@ -33,11 +34,11 @@ def system_theme() -> str:
     on the common dark bar."""
     try:
         if sys.platform == "darwin":
-            import subprocess
+            from murmur import proc
 
             # The global AppleInterfaceStyle key exists only in dark mode;
             # in light mode the read errors out.
-            out = subprocess.run(
+            out = proc.run(
                 ["defaults", "read", "-g", "AppleInterfaceStyle"],
                 capture_output=True, text=True, timeout=2,
             )
@@ -137,6 +138,12 @@ class Tray:
         self._state = "loading"
         self._theme = system_theme()
         self._resets: list[Callable[[], None]] = []
+        # Menu clicks arrive on the menu-bar thread. On a Mac that is the
+        # main thread, and anything slow there (an update check over the
+        # network, launchctl, waiting for a recording to let go of a lock)
+        # is a spinning beach ball. They are queued for this worker instead.
+        self._actions: SimpleQueue = SimpleQueue()
+        self._action_thread: threading.Thread | None = None
         self._on_quit = on_quit
         self._on_settings = on_settings
         hint_text = hint if callable(hint) else (lambda: str(hint))
@@ -280,29 +287,57 @@ class Tray:
         self._resets.append(lambda: cell.update(at=None))
         return read
 
+    def _off_main(self, job: Callable[[], None]) -> None:
+        """Run a menu action without holding up the menu bar.
+
+        Elsewhere the click already arrives on a thread that may block, so
+        it runs in place. On a Mac it is handed to one worker thread, which
+        also keeps two quick clicks in the order they were made.
+        """
+        if sys.platform != "darwin":
+            job()
+            return
+        if self._action_thread is None or not self._action_thread.is_alive():
+            self._action_thread = threading.Thread(
+                target=self._run_actions, name="murmur-menu", daemon=True
+            )
+            self._action_thread.start()
+        self._actions.put(job)
+
+    def _run_actions(self) -> None:
+        while True:
+            job = self._actions.get()
+            try:
+                job()
+            except Exception as e:  # noqa: BLE001 - one bad click must not end the thread
+                log.warning("menu action failed: %s", e)
+
     def _wrap(self, fn: Callable[[], None], what: str):
         def handler(icon, item):
-            try:
-                fn()
-            except Exception as e:
-                log.warning("%s failed: %s", what, e)
-            # The click just changed what the menu should say, so drop the
-            # memoized reads before asking pystray to redraw it.
-            for reset in self._resets:
-                reset()
-            try:
-                icon.update_menu()
-            except Exception:
-                pass
+            def job():
+                try:
+                    fn()
+                except Exception as e:
+                    log.warning("%s failed: %s", what, e)
+                # The click just changed what the menu should say, so drop
+                # the memoized reads before asking pystray to redraw it.
+                for reset in self._resets:
+                    reset()
+                self._on_main(icon.update_menu)
+
+            self._off_main(job)
 
         return handler
 
     def _settings(self, icon, item) -> None:
-        try:
-            if self._on_settings:
-                self._on_settings()
-        except Exception as e:
-            log.debug("open settings failed: %s", e)
+        def job():
+            try:
+                if self._on_settings:
+                    self._on_settings()
+            except Exception as e:
+                log.debug("open settings failed: %s", e)
+
+        self._off_main(job)
 
     def _quit(self, icon, item) -> None:
         try:

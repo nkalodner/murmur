@@ -58,7 +58,7 @@ powershell -NoProfile -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/insta
 
 ```bash
 uv python install 3.12
-uv tool install --python 3.12 https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.7.zip
+uv tool install --python 3.12 https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.8.zip
 murmur
 ```
 
@@ -121,6 +121,19 @@ The exception is a conferencing app configured for exclusive microphone access, 
 ## What's new
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
+
+### 0.15.8
+
+A Mac release. Murmur could get stuck showing that it was recording, stop answering the hotkey, and leave a spinning beach ball over its menu-bar icon. Nothing changes on Windows beyond the last two points.
+
+- **The hotkey no longer goes dead mid-recording.** Murmur opened and closed the microphone inside the same callback macOS uses to tell it about key presses. When the microphone was slow (AirPods switching modes, a Mac just woken up), macOS gave up waiting and stopped sending key presses at all, so letting go of the key was never noticed and the recording ran on until the two-minute limit. Key presses are now only noted there and handled elsewhere, and if macOS ever does switch the listener off, Murmur switches it back on within a couple of seconds.
+- **A microphone that will not close can no longer freeze Murmur.** The microphone is released in the background after each recording, so the transcript starts the moment you let go, and a device that vanished mid-recording costs you that one take at most.
+- **Murmur notices when your microphones change.** It used to read the list of microphones once at launch, so after AirPods connected or a dock was unplugged it could fail to record until you restarted it. On a Mac it now looks again between recordings, and again when a microphone refuses to open.
+- **No more beach ball from the menu.** Everything the menu-bar menu does (checking for updates, switching microphone, pausing) now runs off the menu bar itself, so a slow one cannot hang it.
+- **Lighter on the Mac while it works.** Chimes, the volume dip and the light/dark check each briefly froze all of Murmur, speech model included, every time they ran. They now start without that.
+- **Long recordings are transcribed a piece at a time,** which keeps memory steady on a take that runs toward the limit.
+- **If something does go wrong mid-recording, Murmur goes back to idle** with the error chime, where before it could sit on "recording".
+- **Murmur keeps a log when started from Terminal** (`~/.murmur/murmur.log`, the same file a start at login writes), and a crash now leaves a record there of what it was doing.
 
 ### 0.15.7
 
@@ -427,7 +440,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 - **`murmur --update` is not a recognized argument**: that command arrived in 0.12.0, so a copy older than that has no `--update` to run. Run the [install](#install) line again. It installs over the old copy and keeps your settings and saved words.
 - **An update sits on "restarting" and Murmur never comes back** (or stops with "does not satisfy Python>=3.11"): that copy runs on Python 3.10, and since 0.15.5 Murmur needs 3.11 or newer. Updates from 0.15.4 or older keep the Python they have, so the new version refuses to install. Nothing is damaged. Run the [install](#install) line, which closes the old copy, sets up its own Python and installs over it, then start Murmur again. `~/.murmur/update.log` shows the exact error on a Mac.
 - **A reinstall fails with "Invalid environment ... missing Python executable", or "Access is denied" on Windows**: uv cannot repair the tool's environment in place, either because it was left half-written (the managed Python it used moved) or because Murmur is still running and Windows has its files locked. On versions before 0.13.0, `murmur --update` caused this by itself on Windows, whether or not anything was running; the recovery below is the same either way. Quit Murmur completely first: right-click the tray or menu-bar icon and choose Quit (if it starts at login it may be running on its own). Then remove it and install fresh:
-  - Any platform: `uv tool uninstall murmur-dictation`, then `uv python install 3.12`, then `uv tool install --python 3.12 https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.7.zip`.
+  - Any platform: `uv tool uninstall murmur-dictation`, then `uv python install 3.12`, then `uv tool install --python 3.12 https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.8.zip`.
   - Windows, if the uninstall still reports "Access is denied": a copy is still holding the files. Stop it and clear the folder in PowerShell, then install again:
     ```powershell
     Get-Process murmur*,python*,pythonw* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*uv\tools\murmur-dictation*" } | Stop-Process -Force
@@ -438,7 +451,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
   ```powershell
   uv python install 3.12
   uv tool uninstall murmur-dictation
-  uv tool install --python (uv python find 3.12) https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.7.zip
+  uv tool install --python (uv python find 3.12) https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.8.zip
   ```
   The uninstall may still report the reparse-point error; the install works anyway. If `uv python install` complains about a "minor version link", ignore it, the interpreter is installed (creating that link needs Developer Mode). Confirm with `murmur --doctor`, which prints the Python it is on. Installs from 0.13.0 onward do this by themselves.
 - **Hotkey suddenly does nothing (any platform)**: check the menu bar or tray menu for **Pause dictation**. Paused, Murmur ignores the hotkeys and the idle mic dims until you toggle it back.

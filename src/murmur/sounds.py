@@ -12,7 +12,6 @@ also the fallback if afplay ever misbehaves.
 from __future__ import annotations
 
 import logging
-import shutil
 import subprocess
 import sys
 import threading
@@ -178,7 +177,9 @@ class Sounds:
         Runs in a throwaway daemon thread so play() never waits on the ~50 ms
         process spawn, and the thread reaps the process when the cue ends.
         """
-        if not shutil.which("afplay"):
+        from murmur import proc
+
+        if not proc.which("afplay"):
             return False
         try:
             key = (name, self.volume)
@@ -192,7 +193,7 @@ class Sounds:
             try:
                 if on_audible:
                     on_audible()
-                subprocess.run(
+                proc.run(
                     ["afplay", str(path)],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,

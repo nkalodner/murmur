@@ -1,6 +1,6 @@
 # Murmur, in one line (Windows PowerShell):
 #
-#   powershell -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/nkalodner/murmur/main/install.ps1 | iex"
+#   powershell -NoProfile -ExecutionPolicy ByPass -c "irm https://raw.githubusercontent.com/nkalodner/murmur/main/install.ps1 | iex"
 #
 # Installs uv if it is missing, then installs Murmur from the published
 # archive. The archive rather than a git clone, so this needs no git and

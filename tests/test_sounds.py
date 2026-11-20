@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 import murmur.sounds as sounds
+from murmur import proc
 from murmur.sounds import (
     CUES, GAINS, SR, TAIL_MARGIN, VOLUME, Sounds, cue_path, duration, render,
 )
@@ -66,7 +67,7 @@ def test_play_routes_through_afplay_on_mac(tmp_path, monkeypatch):
 
     monkeypatch.setattr(murmur.config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(sounds.sys, "platform", "darwin")
-    monkeypatch.setattr(sounds.shutil, "which", lambda cmd: "/usr/bin/afplay")
+    monkeypatch.setattr(proc, "which", lambda cmd: "/usr/bin/afplay")
     ran = threading.Event()
     calls: list[list[str]] = []
 
@@ -74,10 +75,10 @@ def test_play_routes_through_afplay_on_mac(tmp_path, monkeypatch):
         calls.append(cmd)
         ran.set()
 
-    monkeypatch.setattr(sounds.subprocess, "run", fake_run)
+    monkeypatch.setattr(proc.subprocess, "run", fake_run)
     Sounds().play("start")
     assert ran.wait(2), "afplay thread never ran"
-    assert calls[0][0] == "afplay"
+    assert Path(calls[0][0]).name == "afplay"
     played = Path(calls[0][1])
     assert played.exists() and played.suffix == ".wav" and played.parent == tmp_path / "cues"
 
@@ -86,7 +87,7 @@ def test_play_survives_no_afplay_and_no_audio(monkeypatch):
     # Fallback path: afplay missing on a "mac" (and, on CI, no output device
     # behind sounddevice either) must never raise; failures are swallowed.
     monkeypatch.setattr(sounds.sys, "platform", "darwin")
-    monkeypatch.setattr(sounds.shutil, "which", lambda cmd: None)
+    monkeypatch.setattr(proc, "which", lambda cmd: None)
     Sounds().play("start")
     Sounds(enabled=False).play("start")  # disabled: a plain no-op
     Sounds().play("no-such-cue")
@@ -120,8 +121,8 @@ def test_volume_change_writes_its_own_cue_file(tmp_path):
 def test_silent_settings_play_nothing(monkeypatch):
     played = []
     monkeypatch.setattr(sounds.sys, "platform", "darwin")
-    monkeypatch.setattr(sounds.shutil, "which", lambda cmd: "/usr/bin/afplay")
-    monkeypatch.setattr(sounds.subprocess, "run", lambda cmd, **kw: played.append(cmd))
+    monkeypatch.setattr(proc, "which", lambda cmd: "/usr/bin/afplay")
+    monkeypatch.setattr(proc.subprocess, "run", lambda cmd, **kw: played.append(cmd))
     Sounds(volume=0.0).play("start")
     Sounds(enabled=False, volume=1.0).play("start")
     threading.Event().wait(0.2)
@@ -152,14 +153,14 @@ def test_on_audible_fires_before_the_player_runs(monkeypatch, tmp_path):
 
     monkeypatch.setattr(murmur.config, "CONFIG_DIR", tmp_path)
     monkeypatch.setattr(sounds.sys, "platform", "darwin")
-    monkeypatch.setattr(sounds.shutil, "which", lambda cmd: "/usr/bin/afplay")
+    monkeypatch.setattr(proc, "which", lambda cmd: "/usr/bin/afplay")
     order, done = [], threading.Event()
 
     def fake_run(cmd, **kwargs):
         order.append("play")
         done.set()
 
-    monkeypatch.setattr(sounds.subprocess, "run", fake_run)
+    monkeypatch.setattr(proc.subprocess, "run", fake_run)
     Sounds().play("start", on_audible=lambda: order.append("mute"))
     assert done.wait(2)
     # Muting after the sound started would leave the chime's head in the take.
@@ -168,8 +169,8 @@ def test_on_audible_fires_before_the_player_runs(monkeypatch, tmp_path):
 
 def test_on_audible_is_skipped_when_nothing_sounds(monkeypatch):
     monkeypatch.setattr(sounds.sys, "platform", "darwin")
-    monkeypatch.setattr(sounds.shutil, "which", lambda cmd: "/usr/bin/afplay")
-    monkeypatch.setattr(sounds.subprocess, "run", lambda cmd, **kw: None)
+    monkeypatch.setattr(proc, "which", lambda cmd: "/usr/bin/afplay")
+    monkeypatch.setattr(proc.subprocess, "run", lambda cmd, **kw: None)
     fired = []
     Sounds(volume=0.0).play("start", on_audible=lambda: fired.append(1))
     Sounds(enabled=False).play("start", on_audible=lambda: fired.append(1))

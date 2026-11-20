@@ -156,6 +156,70 @@ class Binding:
         return was and not self.complete
 
 
+def _listener_class(keyboard):
+    """The pynput Listener to use: on macOS, one that survives being cut off.
+
+    macOS switches a keyboard tap off when its callback is slow to return
+    (and once more for good measure during secure text entry), and tells the
+    callback so with a special event. pynput does not handle that event, so
+    from then on the listener hears nothing: a key held at that moment never
+    reports its release, which leaves Murmur "recording" with a hotkey that
+    no longer does anything. This subclass keeps hold of the tap, switches
+    it back on when told it went off, and can be asked to check on it.
+
+    Anything missing (not macOS, PyObjC shaped differently than expected)
+    falls back to the stock listener, which is what ran before.
+    """
+    if sys.platform != "darwin":
+        return keyboard.Listener
+    try:
+        import Quartz
+
+        disabled = (
+            Quartz.kCGEventTapDisabledByTimeout,
+            Quartz.kCGEventTapDisabledByUserInput,
+        )
+
+        class TapListener(keyboard.Listener):
+            murmur_tap = None
+            murmur_on_restored = None
+
+            def _create_event_tap(self):
+                self.murmur_tap = super()._create_event_tap()
+                return self.murmur_tap
+
+            def _handler(self, proxy, event_type, event, refcon):
+                if event_type in disabled:
+                    self.murmur_revive(force=True)
+                    return event
+                return super()._handler(proxy, event_type, event, refcon)
+
+            def murmur_revive(self, force: bool = False) -> bool:
+                """Switch the tap back on if macOS turned it off. True if it had."""
+                try:
+                    tap = self.murmur_tap
+                    if tap is None:
+                        return False
+                    if not force and Quartz.CGEventTapIsEnabled(tap):
+                        return False
+                    Quartz.CGEventTapEnable(tap, True)
+                except Exception as e:  # noqa: BLE001 - never let this kill the tap thread
+                    log.debug("could not re-enable the keyboard tap: %s", e)
+                    return False
+                log.warning("macOS switched the hotkey listener off; switched it back on")
+                if self.murmur_on_restored is not None:
+                    try:
+                        self.murmur_on_restored()
+                    except Exception:
+                        log.exception("hotkey restore handler failed")
+                return True
+
+        return TapListener
+    except Exception as e:  # noqa: BLE001
+        log.debug("tap-reviving listener unavailable (%s); using the stock one", e)
+        return keyboard.Listener
+
+
 class HotkeyListener:
     """Watches the hotkeys globally: press/release drive the app, Esc cancels."""
 
@@ -178,9 +242,11 @@ class HotkeyListener:
         # Backends can deliver a trailing event after stop() (X11 does), so
         # gate callbacks on our own flag to make shutdown airtight.
         self._active_listener = True
-        self._listener = keyboard.Listener(
+        self._listener = _listener_class(keyboard)(
             on_press=self._handle_press, on_release=self._handle_release
         )
+        if hasattr(self._listener, "murmur_on_restored"):
+            self._listener.murmur_on_restored = self._tap_restored
 
     @staticmethod
     def _build(hotkey: str | None, hotkey2: str | None) -> list[Binding]:
@@ -209,6 +275,27 @@ class HotkeyListener:
     def stop(self) -> None:
         self._active_listener = False
         self._listener.stop()
+
+    def check_tap(self) -> bool:
+        """Make sure macOS has not switched the listener off; True if it had.
+
+        The system normally announces that through the listener's own
+        callback, which already switches it back on. This is the belt to
+        that pair of braces, cheap enough to call every couple of seconds.
+        """
+        revive = getattr(self._listener, "murmur_revive", None)
+        return bool(revive()) if revive is not None and self._active_listener else False
+
+    def _tap_restored(self) -> None:
+        """Events were lost while the tap was off, so what we believe about
+        which keys are held can no longer be trusted. Forget all of it, and
+        if a held key was driving a take, treat it as released: finishing a
+        take a moment early beats recording until the time limit."""
+        for binding in self._bindings:
+            binding.reset()
+        if self._active is not None:
+            self._active = None
+            self._on_release()
 
     def retarget(self, hotkey: str | None, hotkey2: str | None = None) -> None:
         """Watch different keys on the live listener.

@@ -68,3 +68,41 @@ def test_too_short_audio_never_loads_a_model(fake_onnx_asr):
     _, loads = fake_onnx_asr
     assert Transcriber("whisper-base", None, "zh").transcribe(_speech(0.1)) == ""
     assert loads == []
+
+
+def test_a_long_take_goes_through_one_piece_at_a_time(fake_onnx_asr, monkeypatch):
+    # A two-minute take is six pieces. As one batch the model holds all six
+    # in memory at once; in turn it only ever holds one.
+    import murmur.transcribe as transcribe
+
+    model, _ = fake_onnx_asr
+    sizes = []
+    original = model.recognize
+
+    def recognize(chunks, sample_rate=None, **kwargs):
+        sizes.append(len(chunks))
+        return original(chunks, sample_rate=sample_rate, **kwargs)
+
+    model.recognize = recognize
+    monkeypatch.setattr(transcribe, "split_for_asr", lambda wav: [wav[:8000]] * 4)
+    assert Transcriber("whisper-base", None, None).transcribe(_speech()) == "ok ok ok ok"
+    assert sizes == [1, 1, 1, 1]
+
+
+def test_a_model_without_a_language_option_is_asked_plainly(fake_onnx_asr, monkeypatch):
+    import murmur.transcribe as transcribe
+
+    model, _ = fake_onnx_asr
+    seen = []
+
+    def recognize(chunks, sample_rate=None, **kwargs):
+        seen.append(dict(kwargs))
+        if kwargs:
+            raise TypeError("unexpected keyword argument 'language'")
+        return ["ok"]
+
+    model.recognize = recognize
+    monkeypatch.setattr(transcribe, "split_for_asr", lambda wav: [wav[:8000]] * 3)
+    assert Transcriber("parakeet", None, "fr").transcribe(_speech()) == "ok ok ok"
+    # Offered once, refused once, then not offered again for this take.
+    assert seen == [{"language": "fr"}, {}, {}, {}]

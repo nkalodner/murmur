@@ -22,10 +22,11 @@ saved level is a no-op, so a double restore cannot strand the volume.
 from __future__ import annotations
 
 import logging
-import subprocess
 import sys
 import threading
 from queue import SimpleQueue
+
+from murmur import proc
 
 log = logging.getLogger("murmur")
 
@@ -42,7 +43,7 @@ def supported() -> bool:
 
 
 def _mac_get() -> float | None:
-    out = subprocess.run(
+    out = proc.run(
         ["osascript", "-e", "output volume of (get volume settings)"],
         capture_output=True,
         text=True,
@@ -55,7 +56,7 @@ def _mac_get() -> float | None:
 
 
 def _mac_set(level: float) -> None:
-    subprocess.run(
+    proc.run(
         ["osascript", "-e", f"set volume output volume {round(level * 100)}"],
         capture_output=True,
         timeout=CALL_TIMEOUT,

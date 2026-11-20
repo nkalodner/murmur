@@ -466,3 +466,44 @@ def test_cached_icon_matches_a_fresh_render():
     assert np.asarray(icon_for("recording", "dark")).tolist() == (
         np.asarray(render_icon("recording", theme="dark")).tolist()
     )
+
+
+def test_mac_menu_clicks_do_not_run_on_the_menu_bar_thread(monkeypatch):
+    # A click arrives on the main thread on a Mac. Anything slow done there
+    # (an update check, a lock a recording is holding) is a beach ball, so
+    # the action runs on a worker and only the redraw comes back.
+    import sys, threading, types
+
+    import murmur.tray as tray_mod
+
+    _fake_pystray(monkeypatch)
+    queued = []
+    helper = types.ModuleType("PyObjCTools.AppHelper")
+    helper.callAfter = queued.append
+    monkeypatch.setitem(sys.modules, "PyObjCTools.AppHelper", helper)
+    release, ran_on = threading.Event(), []
+
+    def slow():
+        ran_on.append(threading.current_thread())
+        release.wait(5)
+
+    tray = Tray("hint", on_quit=lambda: None, on_settings=slow,
+                is_paused=lambda: False, on_toggle_pause=slow)
+    monkeypatch.setattr(tray_mod.sys, "platform", "darwin")
+    items = [i for i in tray._icon.menu.items if i != "---"]
+    pause = next(i for i in items if _label(i) == "Pause dictation")
+    settings = next(i for i in items if _label(i) == "Settings...")
+
+    pause.action(tray._icon, pause)  # returns although the action is stuck
+    settings.action(tray._icon, settings)
+    assert tray._icon.updates == 0
+    release.set()
+    tray._action_thread.join(0.01)
+    for _ in range(200):
+        if queued:
+            break
+        threading.Event().wait(0.01)
+    assert len(ran_on) >= 1 and ran_on[0] is not threading.main_thread()
+    assert tray._icon.updates == 0 and len(queued) == 1  # the redraw waits its turn
+    queued[0]()
+    assert tray._icon.updates == 1

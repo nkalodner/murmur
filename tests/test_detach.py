@@ -75,3 +75,20 @@ def test_a_first_run_still_opens_settings_after_the_handoff(monkeypatch):
     # And not added on an ordinary run.
     _relaunch_detached([], open_settings=False)
     assert "--settings" not in seen["cmd"]
+
+
+def test_the_background_copy_logs_to_a_file_that_outlives_the_terminal(monkeypatch, murmur_home):
+    # Its stderr used to be the terminal that started it, so once that
+    # window closed there was no record of why Murmur stopped working.
+    import subprocess
+
+    if sys.platform == "win32":
+        return  # pythonw has no console; main() already logs to the file there
+    seen = {}
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/murmur")
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: seen.update(kw=kw) or object())
+    assert _relaunch_detached([]) is True
+    out = seen["kw"]["stdout"]
+    assert out is seen["kw"]["stderr"]
+    assert out.name == str(murmur_home / "murmur.log")
+    assert out.closed  # ours is closed; the child holds its own
