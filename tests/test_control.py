@@ -180,12 +180,12 @@ def test_the_pause_also_follows_a_take_that_was_kept(app):
 def test_the_pause_is_the_setting(app):
     from dataclasses import replace
 
-    app.cfg = replace(app.cfg, cooldown_ms=200)  # the shortest allowed
+    app.cfg = replace(app.cfg, cooldown_ms=300)  # the shortest allowed
     now = time.monotonic()
     app._handle_event("press", now)
     app._handle_event("cancel", now + 0.2)
     ended = app._ended_t
     app._handle_event("press", ended + 0.1)
     assert app._state == State.IDLE
-    app._handle_event("press", ended + 0.25)  # past 200 ms, well short of the default
+    app._handle_event("press", ended + 0.35)  # past 300 ms, well short of the default
     assert app._state == State.RECORDING

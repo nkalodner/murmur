@@ -246,7 +246,7 @@ def validate(cfg: Config) -> None:
     # The floor is there because each take opens the microphone and closes
     # it again, and with no gap at all a tapped key does that fast enough to
     # make the device refuse.
-    _int_in("cooldown_ms", cfg.cooldown_ms, 200, 5000)
+    _int_in("cooldown_ms", cfg.cooldown_ms, 300, 5000)
     _int_in("max_seconds", cfg.max_seconds, 5, 1800)
     _int_in("restore_clipboard_ms", cfg.restore_clipboard_ms, -1, 60000)
     if isinstance(cfg.vocab_threshold, bool) or not isinstance(cfg.vocab_threshold, (int, float)):

@@ -124,7 +124,7 @@ Not sure which version you have? Run `murmur --version`, or look at the top of t
 
 ### 0.15.11
 
-- **The pause after a recording is now a setting.** Settings > Recording > Pause after a recording, in milliseconds. It starts at 750 and goes down to 200, for anyone who dictates in quick bursts. 200 is the floor because with no gap at all, tapping the hotkey opens and closes the microphone faster than it can keep up.
+- **The pause after a recording is now a setting.** Settings > Recording > Pause after a recording, in milliseconds. It starts at 750 and goes down to 300, for anyone who dictates in quick bursts. 300 is the floor because with no gap at all, tapping the hotkey opens and closes the microphone faster than it can keep up.
 - **A microphone that was only just closed gets a second try.** At a short pause the next recording can arrive while the microphone is still settling. Murmur now waits a quarter of a second and tries again before it gives you the error chime.
 
 ### 0.15.10
@@ -381,7 +381,7 @@ murmur --import-dictionary murmur-dictionary.json
 | `paste` | `true` | `false` types character by character instead of pasting |
 | `restore_clipboard_ms` | `600` | Delay before restoring your previous clipboard; `-1` never restores |
 | `tap_lock_ms` | `350` | Presses shorter than this lock hands-free recording |
-| `cooldown_ms` | `750` | After a recording ends, the hotkey is ignored for this long. `200` is the shortest allowed |
+| `cooldown_ms` | `750` | After a recording ends, the hotkey is ignored for this long. `300` is the shortest allowed |
 | `max_seconds` | `120` | Auto-stop for a single recording |
 | `trailing_space` | `true` | Append a space so back-to-back dictations flow |
 | `history` | `true` | Log transcripts to `~/.murmur/history.jsonl` |
