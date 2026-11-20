@@ -30,6 +30,9 @@ def _sd():
 RESCAN = sys.platform == "darwin"
 RESCAN_AGE = 20.0  # seconds a list may sit before a finished take refreshes it
 CLOSE_WAIT = 1.0  # how long a new take waits on the last one's stream closing
+# A device that was closed a moment ago can refuse to open and then accept a
+# beat later. One short wait and a second try, before anything heavier.
+OPEN_RETRY_WAIT = 0.25
 
 # One lock for everything that opens, closes or restarts PortAudio. Nothing
 # on the menu-bar thread may ever wait on it: the device list those callers
@@ -295,7 +298,12 @@ class Recorder:
                     self._device = self._resolve()
                     self._device_gen = _scan_gen
                 try:
-                    stream = self._open_started(sd, callback)
+                    try:
+                        stream = self._open_started(sd, callback)
+                    except Exception as early:
+                        log.debug("microphone open failed (%s); trying once more", early)
+                        time.sleep(OPEN_RETRY_WAIT)
+                        stream = self._open_started(sd, callback)
                 except Exception as first:
                     # Most often a stale device list. Look again and retry
                     # once; if nothing can be refreshed, the first error is

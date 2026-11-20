@@ -58,7 +58,7 @@ powershell -NoProfile -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/insta
 
 ```bash
 uv python install 3.12
-uv tool install --python 3.12 https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.10.zip
+uv tool install --python 3.12 https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.11.zip
 murmur
 ```
 
@@ -121,6 +121,11 @@ The exception is a conferencing app configured for exclusive microphone access, 
 ## What's new
 
 Not sure which version you have? Run `murmur --version`, or look at the top of the settings page. Updating is the one line in [Install](#install) above.
+
+### 0.15.11
+
+- **The pause after a recording is now a setting.** Settings > Recording > Pause after a recording, in milliseconds. It starts at 750 and goes down to 200, for anyone who dictates in quick bursts. 200 is the floor because with no gap at all, tapping the hotkey opens and closes the microphone faster than it can keep up.
+- **A microphone that was only just closed gets a second try.** At a short pause the next recording can arrive while the microphone is still settling. Murmur now waits a quarter of a second and tries again before it gives you the error chime.
 
 ### 0.15.10
 
@@ -376,6 +381,7 @@ murmur --import-dictionary murmur-dictionary.json
 | `paste` | `true` | `false` types character by character instead of pasting |
 | `restore_clipboard_ms` | `600` | Delay before restoring your previous clipboard; `-1` never restores |
 | `tap_lock_ms` | `350` | Presses shorter than this lock hands-free recording |
+| `cooldown_ms` | `750` | After a recording ends, the hotkey is ignored for this long. `200` is the shortest allowed |
 | `max_seconds` | `120` | Auto-stop for a single recording |
 | `trailing_space` | `true` | Append a space so back-to-back dictations flow |
 | `history` | `true` | Log transcripts to `~/.murmur/history.jsonl` |
@@ -454,7 +460,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
 - **`murmur --update` is not a recognized argument**: that command arrived in 0.12.0, so a copy older than that has no `--update` to run. Run the [install](#install) line again. It installs over the old copy and keeps your settings and saved words.
 - **An update sits on "restarting" and Murmur never comes back** (or stops with "does not satisfy Python>=3.11"): that copy runs on Python 3.10, and since 0.15.5 Murmur needs 3.11 or newer. Updates from 0.15.4 or older keep the Python they have, so the new version refuses to install. Nothing is damaged. Run the [install](#install) line, which closes the old copy, sets up its own Python and installs over it, then start Murmur again. `~/.murmur/update.log` shows the exact error on a Mac.
 - **A reinstall fails with "Invalid environment ... missing Python executable", or "Access is denied" on Windows**: uv cannot repair the tool's environment in place, either because it was left half-written (the managed Python it used moved) or because Murmur is still running and Windows has its files locked. On versions before 0.13.0, `murmur --update` caused this by itself on Windows, whether or not anything was running; the recovery below is the same either way. Quit Murmur completely first: right-click the tray or menu-bar icon and choose Quit (if it starts at login it may be running on its own). Then remove it and install fresh:
-  - Any platform: `uv tool uninstall murmur-dictation`, then `uv python install 3.12`, then `uv tool install --python 3.12 https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.10.zip`.
+  - Any platform: `uv tool uninstall murmur-dictation`, then `uv python install 3.12`, then `uv tool install --python 3.12 https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.11.zip`.
   - Windows, if the uninstall still reports "Access is denied": a copy is still holding the files. Stop it and clear the folder in PowerShell, then install again:
     ```powershell
     Get-Process murmur*,python*,pythonw* -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*uv\tools\murmur-dictation*" } | Stop-Process -Force
@@ -465,7 +471,7 @@ Every computer is its own setup. The toggle only touches the machine you run it 
   ```powershell
   uv python install 3.12
   uv tool uninstall murmur-dictation
-  uv tool install --python (uv python find 3.12) https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.10.zip
+  uv tool install --python (uv python find 3.12) https://github.com/nkalodner/murmur/archive/refs/tags/v0.15.11.zip
   ```
   The uninstall may still report the reparse-point error; the install works anyway. If `uv python install` complains about a "minor version link", ignore it, the interpreter is installed (creating that link needs Developer Mode). Confirm with `murmur --doctor`, which prints the Python it is on. Installs from 0.13.0 onward do this by themselves.
 - **Hotkey suddenly does nothing (any platform)**: check the menu bar or tray menu for **Pause dictation**. Paused, Murmur ignores the hotkeys and the idle mic dims until you toggle it back.

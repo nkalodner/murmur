@@ -74,6 +74,7 @@ def sd(monkeypatch):
     monkeypatch.setattr(audio, "_scan_gen", 0)
     monkeypatch.setattr(audio, "RESCAN", True)  # the macOS behavior
     monkeypatch.setattr(audio, "RESCAN_AGE", 3600.0)  # no rescans unless a test asks
+    monkeypatch.setattr(audio, "OPEN_RETRY_WAIT", 0.0)
     return fake
 
 
@@ -116,7 +117,7 @@ def test_a_closing_stream_cannot_leak_into_the_next_take(sd):
 def test_a_failed_open_refreshes_the_device_list_and_tries_again(sd):
     resolved = []
     rec = Recorder(0, resolve=lambda: resolved.append(1) or 0)
-    sd.fail_opens = 2  # 16 kHz and the native-rate fallback, on the stale list
+    sd.fail_opens = 4  # both formats, on the first try and the second
     rec.start()
     assert sd.restarts == 1 and resolved, "PortAudio was not restarted and re-resolved"
     assert rec.active
@@ -176,3 +177,15 @@ def test_the_device_list_is_served_from_the_last_scan(sd):
     assert audio.find_input_device("built") == 0
     with pytest.raises(LookupError):
         audio.find_input_device("AirPods")
+
+
+def test_a_device_that_was_only_just_closed_gets_a_second_try(sd):
+    # At the shortest pause the next take can arrive while the device is
+    # still settling. That is a moment's wait, not an error chime, and not
+    # worth restarting the audio system over.
+    rec = Recorder()
+    sd.fail_opens = 2  # refuses once (both formats), then accepts
+    rec.start()
+    assert rec.active and sd.restarts == 0
+    rec.abort()
+    assert rec.wait_closed(2)

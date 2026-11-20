@@ -51,6 +51,8 @@ def test_validate_accepts_defaults():
     Config(hotkey=""),
     Config(model=""),
     Config(tap_lock_ms=10),          # below 50
+    Config(cooldown_ms=199),         # below 200: no gap is what broke the mic
+    Config(cooldown_ms=5001),        # above 5000
     Config(max_seconds=99999),       # above 1800
     Config(restore_clipboard_ms=-2), # below -1
     Config(vocab_threshold=0.4),     # below 0.5

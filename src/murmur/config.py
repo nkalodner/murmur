@@ -45,6 +45,7 @@ class Config:
     paste: bool = True  # false = type character by character instead of pasting
     restore_clipboard_ms: int = 600  # delay before restoring the previous clipboard; -1 = never restore
     tap_lock_ms: int = 350  # a press shorter than this locks hands-free recording
+    cooldown_ms: int = 750  # the hotkey is ignored this long after a recording ends
     max_seconds: int = 120  # auto-stop a recording after this long
     trailing_space: bool = True  # append a space so the next dictation flows on
     history: bool = True  # append transcripts to ~/.murmur/history.jsonl
@@ -242,6 +243,10 @@ def validate(cfg: Config) -> None:
     _int_in("duck_percent", cfg.duck_percent, 0, 100)
     _int_in("sound_volume", cfg.sound_volume, 0, 100)
     _int_in("tap_lock_ms", cfg.tap_lock_ms, 50, 2000)
+    # The floor is there because each take opens the microphone and closes
+    # it again, and with no gap at all a tapped key does that fast enough to
+    # make the device refuse.
+    _int_in("cooldown_ms", cfg.cooldown_ms, 200, 5000)
     _int_in("max_seconds", cfg.max_seconds, 5, 1800)
     _int_in("restore_clipboard_ms", cfg.restore_clipboard_ms, -1, 60000)
     if isinstance(cfg.vocab_threshold, bool) or not isinstance(cfg.vocab_threshold, (int, float)):

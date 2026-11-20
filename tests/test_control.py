@@ -108,7 +108,7 @@ def test_a_failure_mid_take_goes_back_to_idle_not_stuck_recording(app):
     app._handle_event("release", now + 1.0)  # must not raise, must not strand
     assert app._state == State.IDLE
     app.recorder.fail_stop = False
-    app._handle_event("press", time.monotonic() + app.COOLDOWN)  # and the hotkey still works
+    app._handle_event("press", time.monotonic() + app.cfg.cooldown_ms / 1000)  # and the hotkey still works
     assert app._state == State.RECORDING
 
 
@@ -117,7 +117,7 @@ def test_a_time_limit_from_an_earlier_take_does_not_end_this_one(app):
     app._handle_event("press", now)
     first = app._take
     app._handle_event("cancel", now + 0.5)
-    app._handle_event("press", time.monotonic() + app.COOLDOWN)
+    app._handle_event("press", time.monotonic() + app.cfg.cooldown_ms / 1000)
     app._handle_event("max", time.monotonic(), first)  # fired late, for take one
     assert app._state == State.RECORDING
     app._handle_event("max", time.monotonic(), app._take)
@@ -163,7 +163,7 @@ def test_a_press_right_after_a_take_is_ignored(app):
     assert app._state == State.IDLE and app.recorder.starts == 1
     app._handle_event("release", ended + 0.2)  # its release changes nothing
     assert app._state == State.IDLE
-    app._handle_event("press", ended + app.COOLDOWN + 0.01)  # a beat later it is back
+    app._handle_event("press", ended + app.cfg.cooldown_ms / 1000 + 0.01)  # a beat later it is back
     assert app._state == State.RECORDING and app.recorder.starts == 2
 
 
@@ -175,3 +175,17 @@ def test_the_pause_also_follows_a_take_that_was_kept(app):
         app._set_state(State.IDLE)  # the transcript landed at once
     app._handle_event("press", app._ended_t + 0.1)
     assert app._state == State.IDLE and app.recorder.starts == 1
+
+
+def test_the_pause_is_the_setting(app):
+    from dataclasses import replace
+
+    app.cfg = replace(app.cfg, cooldown_ms=200)  # the shortest allowed
+    now = time.monotonic()
+    app._handle_event("press", now)
+    app._handle_event("cancel", now + 0.2)
+    ended = app._ended_t
+    app._handle_event("press", ended + 0.1)
+    assert app._state == State.IDLE
+    app._handle_event("press", ended + 0.25)  # past 200 ms, well short of the default
+    assert app._state == State.RECORDING

@@ -193,12 +193,6 @@ class App:
     # took seconds to open). Starting a take now, long after the key went
     # down, would record at a moment nobody chose.
     STALE_PRESS = 1.5
-    # After a take ends, the hotkey is ignored for this long. Each take opens
-    # the microphone and closes it again, and doing that several times a
-    # second (the key tapped on and off) is how the device ends up refusing
-    # to open: an error chime per press, then nothing. Long enough for the
-    # close to finish, short enough not to be felt between real dictations.
-    COOLDOWN = 0.75
 
     def _control_loop(self) -> None:
         while not self._stopping.is_set():
@@ -254,7 +248,12 @@ class App:
                 if time.monotonic() - t > self.STALE_PRESS:
                     log.info("Ignored a hotkey press that waited too long to be handled")
                     return
-                if t - self._ended_t < self.COOLDOWN:
+                # After a take ends the hotkey is ignored for cfg.cooldown_ms.
+                # Each take opens the microphone and closes it again, and
+                # doing that several times a second (the key tapped on and
+                # off) is how the device ends up refusing to open: an error
+                # chime per press, then nothing.
+                if (t - self._ended_t) * 1000 < self.cfg.cooldown_ms:
                     log.debug("Ignored a hotkey press right after the last recording")
                     return
                 self._press_t = t

@@ -212,6 +212,7 @@
       <label class="check setting"><span>Recording pill<span class="sub" id="pillSub">Floating level bars while you talk (Windows, Linux)</span></span><input type="checkbox" id="pill"></label>
       <div class="setting"><span>Max recording<span class="sub">Auto-stop, in seconds</span></span><input type="number" id="max_seconds" min="5" max="1800"></div>
       <div class="setting"><span>Tap lock<span class="sub">Shorter presses (ms) lock hands-free</span></span><input type="number" id="tap_lock_ms" min="50" max="2000"></div>
+      <div class="setting"><span>Pause after a recording<span class="sub">Hotkey ignored this long (ms) once one ends. 200 to 5000</span></span><input type="number" id="cooldown_ms" min="200" max="5000" step="50"></div>
     </div>
   </section>
   </div>
@@ -888,7 +889,7 @@ function renderAll(state) {
   renderHotkeys();
   renderDevices(); renderVocab(); renderPairs(); renderPacks();
   for (const id of ["sounds", "mute_start_cue", "paste", "trailing_space", "history", "pill", "formatting", "format_bare_times", "format_acronyms", "duck_audio", "remove_fillers", "update_check"]) $(id).checked = !!cfg[id];
-  for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"]) $(id).value = cfg[id];
+  for (const id of ["max_seconds", "tap_lock_ms", "cooldown_ms", "restore_clipboard_ms"]) $(id).value = cfg[id];
   $("threshold").value = nearestThreshold(cfg.vocab_threshold);
   renderFormatRules();
   $("duck_percent").value = cfg.duck_percent;
@@ -1086,7 +1087,7 @@ $("sound_volume").addEventListener("input", () => {
   $("soundVolumeVal").textContent = cfg.sound_volume + "%";
   setDirty(true);
 });
-for (const id of ["max_seconds", "tap_lock_ms", "restore_clipboard_ms"])
+for (const id of ["max_seconds", "tap_lock_ms", "cooldown_ms", "restore_clipboard_ms"])
   $(id).addEventListener("input", () => { cfg[id] = parseInt($(id).value, 10); setDirty(true); });
 // The three words map to numbers on a 0.5-1 scale (config.json still takes
 // any value; a hand-tuned one shows as whichever word is nearest and is left
