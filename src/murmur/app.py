@@ -76,6 +76,10 @@ class App:
         self._max_timer: threading.Timer | None = None
         self._jobs: SimpleQueue = SimpleQueue()
         self._stopping = threading.Event()
+        # Seconds after shutdown() begins at which the process is ended no
+        # matter what. main() sets it; left None, shutdown only asks nicely
+        # (which is what tests and embedders want).
+        self.exit_deadline: float | None = None
         # Hotkey events are handled on a thread of their own. The listener
         # only drops them here and returns, because opening or closing the
         # microphone inside the keyboard tap's callback is slow enough that
@@ -919,6 +923,18 @@ class App:
             return
         self._stopping.set()
         log.info("Shutting down")
+        if self.exit_deadline is not None:
+            # Quit has to mean gone. A copy that hangs on its way out keeps
+            # the single-instance port, the microphone and (on a Mac) a
+            # ghost of its menu on screen, and the next launch runs into
+            # all three. Long enough for the volume to be put back.
+            def give_up() -> None:
+                log.warning("Shutdown did not finish; exiting anyway")
+                os._exit(0)
+
+            timer = threading.Timer(self.exit_deadline, give_up)
+            timer.daemon = True
+            timer.start()
         try:
             if self.listener:
                 self.listener.stop()
@@ -1408,6 +1424,7 @@ def main(argv: list[str] | None = None) -> int:
         log.error("%s", e)
         lock.close()
         return 2
+    app.exit_deadline = 8.0
     try:
         app.run(use_tray=not args.no_tray, open_settings=args.settings or first_run)
     except ValueError as e:  # bad hotkey name

@@ -128,3 +128,25 @@ def test_keys_work_without_a_control_thread(app):
     # Before run() starts it, or if it ever died: handled in place.
     app.on_press()
     assert app._state == State.RECORDING
+
+
+def test_a_shutdown_that_hangs_still_ends_the_process(app, monkeypatch):
+    # Quit has to mean gone: a copy that hangs on its way out keeps the
+    # microphone, the single-instance port and a ghost menu on screen.
+    import murmur.app as app_mod
+
+    exits = []
+    monkeypatch.setattr(app_mod.os, "_exit", exits.append)
+    app.exit_deadline = 0.05
+    app.shutdown()
+    assert _wait(lambda: exits == [0])
+
+
+def test_shutdown_never_force_exits_unless_asked(app, monkeypatch):
+    import murmur.app as app_mod
+
+    exits = []
+    monkeypatch.setattr(app_mod.os, "_exit", exits.append)
+    app.shutdown()  # exit_deadline is None outside main()
+    time.sleep(0.1)
+    assert exits == []

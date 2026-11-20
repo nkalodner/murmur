@@ -507,3 +507,45 @@ def test_mac_menu_clicks_do_not_run_on_the_menu_bar_thread(monkeypatch):
     assert tray._icon.updates == 0 and len(queued) == 1  # the redraw waits its turn
     queued[0]()
     assert tray._icon.updates == 1
+
+
+def test_mac_quit_shuts_down_off_the_menu_bar_thread(monkeypatch):
+    # A shutdown that stalled on the main thread left the process alive
+    # with its open menu stuck on screen as an invisible window: a beach
+    # ball over that patch even after Murmur was started again.
+    import sys, threading, types
+
+    import murmur.tray as tray_mod
+
+    _fake_pystray(monkeypatch)
+    queued = []
+    helper = types.ModuleType("PyObjCTools.AppHelper")
+    helper.callAfter = queued.append
+    monkeypatch.setitem(sys.modules, "PyObjCTools.AppHelper", helper)
+    release, ran_on = threading.Event(), []
+
+    def stuck_shutdown():
+        ran_on.append(threading.current_thread())
+        release.wait(5)
+
+    tray = Tray("hint", on_quit=stuck_shutdown)
+    monkeypatch.setattr(tray_mod.sys, "platform", "darwin")
+    quit_item = next(i for i in tray._icon.menu.items if i != "---" and _label(i) == "Quit Murmur")
+    quit_item.action(tray._icon, quit_item)  # returns while shutdown is stuck
+    release.set()
+    for _ in range(200):
+        if queued:
+            break
+        threading.Event().wait(0.01)
+    assert ran_on and ran_on[0] is not threading.main_thread()
+    queued[0]()  # the icon is stopped back on the main thread
+    assert tray._icon.stopped
+
+
+def test_quit_elsewhere_still_stops_the_icon_in_place(monkeypatch):
+    _fake_pystray(monkeypatch)
+    quits = []
+    tray = Tray("hint", on_quit=lambda: quits.append(1))
+    quit_item = next(i for i in tray._icon.menu.items if i != "---" and _label(i) == "Quit Murmur")
+    quit_item.action(tray._icon, quit_item)
+    assert quits == [1] and tray._icon.stopped

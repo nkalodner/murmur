@@ -340,10 +340,19 @@ class Tray:
         self._off_main(job)
 
     def _quit(self, icon, item) -> None:
-        try:
-            self._on_quit()
-        finally:
-            icon.stop()
+        def job():
+            try:
+                self._on_quit()
+            finally:
+                self._on_main(icon.stop)
+
+        # On a Mac the shutdown must not run on the menu-bar thread. If any
+        # step of it stalls there (a microphone that will not let go), the
+        # process never exits and the menu that was open when Quit was
+        # chosen stays behind as an invisible window: a patch of screen
+        # under the icon where the cursor is a beach ball, even after a new
+        # copy is started.
+        self._off_main(job)
 
     def notify(self, message: str) -> None:
         """A small system notification, where the platform has one. The tray
